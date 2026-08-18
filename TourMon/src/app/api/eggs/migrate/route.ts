@@ -173,14 +173,20 @@ export async function POST(request: NextRequest) {
       continue;
     }
 
-    await db.insert(userMonsters).values({
-      id: monster.id,
-      userId: auth.sub,
-      monsterSpeciesId: species.id,
-      eggId: monster.eggId,
-      tourismSpotId: monster.tourismSpotId ?? null,
-      hatchedAt: new Date(monster.hatchedAt),
-    });
+    try {
+      await db.insert(userMonsters).values({
+        id: monster.id,
+        userId: auth.sub,
+        monsterSpeciesId: species.id,
+        eggId: monster.eggId,
+        tourismSpotId: monster.tourismSpotId ?? null,
+        hatchedAt: new Date(monster.hatchedAt),
+      });
+    } catch {
+      // eggId unique 제약 위반 포함 — 이미 다른 몬스터 row가 이 알을 소진했으면 거부.
+      monsterResults.push({ id: monster.id, status: "rejected" });
+      continue;
+    }
     monsterResults.push({ id: monster.id, status: "migrated" });
   }
 

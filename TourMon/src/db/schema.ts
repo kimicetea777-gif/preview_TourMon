@@ -318,9 +318,11 @@ export const userMonsters = pgTable("user_monsters", {
   monsterSpeciesId: integer("monster_species_id")
     .notNull()
     .references(() => monsterSpecies.id, { onDelete: "restrict" }),
-  eggId: uuid("egg_id").references(() => userEggs.id, {
-    onDelete: "set null",
-  }),
+  // unique — 알 하나당 몬스터 하나(1:1)가 불변식. hatch/route.ts는 egg.hatchedAt 체크로 이미 이걸
+  // 강제하지만, DB 제약이 없으면 migrate 경로가 검증된 알 하나를 여러 몬스터 row가 재사용하는 걸 못 막음.
+  eggId: uuid("egg_id")
+    .references(() => userEggs.id, { onDelete: "set null" })
+    .unique(),
   tourismSpotId: integer("tourism_spot_id").references(
     () => tourismSpots.id,
     { onDelete: "set null" },
