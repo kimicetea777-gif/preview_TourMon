@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 디버그 빌드 전용: 로컬 개발용 pmtiles-server가 평문 HTTP라서 필요.
+     release 빌드에는 포함되지 않음 — 프로덕션은 cloudflared로 HTTPS. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

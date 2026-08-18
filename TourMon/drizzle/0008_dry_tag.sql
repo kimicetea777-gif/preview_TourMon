@@ -1,0 +1,1 @@
+ALTER TABLE "content_types" ADD COLUMN "egg_acquisition_enabled" boolean DEFAULT true NOT NULL;

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 140">
+  <path d="M62,18 C88,18 108,44 110,76 C112,108 92,132 62,132 C32,132 12,108 14,76 C16,44 36,18 62,18 Z"
+        fill="none" stroke="#8B5CF6" stroke-width="1.5" opacity="0.35" stroke-linejoin="round"/>
+  <path d="M60,16 C86,16 106,42 108,74 C110,106 90,130 60,130 C30,130 10,106 12,74 C14,42 34,16 60,16 Z"
+        fill="#F5F3FF" stroke="#8B5CF6" stroke-width="3" stroke-linejoin="round"/>
+
+  <!-- 소용돌이 무늬 -->
+  <path d="M42,60 C50,50 66,50 70,62 C74,74 64,82 54,78 C46,75 46,65 54,64"
+        fill="none" stroke="#8B5CF6" stroke-width="2" stroke-linecap="round" opacity="0.75"/>
+
+  <!-- 반짝임(별) 2개 -->
+  <path d="M100,20 L102,24 L106,26 L102,28 L100,32 L98,28 L94,26 L98,24 Z" fill="#8B5CF6" opacity="0.85"/>
+  <path d="M18,104 L20,108 L24,110 L20,112 L18,116 L16,112 L12,110 L16,108 Z" fill="#8B5CF6" opacity="0.7"/>
+
+  <g stroke="#8B5CF6" stroke-width="1.2" opacity="0.3" stroke-linecap="round">
+    <path d="M18,102 L25,99"/>
+    <path d="M16,109 L23,106"/>
+  </g>
+</svg>

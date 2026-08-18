@@ -1,0 +1,21 @@
+name = "tourmon-pmtiles"
+main = "src/index.ts"
+compatibility_date = "2026-08-01"
+minify = false
+
+routes = [
+  { pattern = "tiles.kimicetea.app", custom_domain = true }
+]
+
+# R2 bucket 바인딩 — TourMon의 기존 tourmon-assets 버킷 재사용(PMTiles와 R2 이미지 에셋이 이미 같은 버킷).
+[[r2_buckets]]
+binding = "BUCKET"
+preview_bucket_name = "tourmon-assets"
+bucket_name = "tourmon-assets"
+
+[vars]
+ALLOWED_ORIGINS = "*"
+CACHE_CONTROL = "public, max-age=86400"
+# 요청 경로의 {name}(예: seoul-incheon-raster)을 실제 R2 객체 키(maps/seoul-incheon-raster.pmtiles)로 변환
+# — scripts/map-pipeline/config.ts의 R2_OBJECT_KEY와 대응.
+PMTILES_PATH = "maps/{name}.pmtiles"

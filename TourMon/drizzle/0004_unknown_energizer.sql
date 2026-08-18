@@ -1,0 +1,1 @@
+ALTER TABLE "tourism_spots" ADD COLUMN "content_id_en" text;

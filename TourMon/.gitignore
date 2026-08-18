@@ -1,0 +1,51 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+# cloudflare-worker/cloudflare 등 하위 패키지의 node_modules도 포함(위 /node_modules는 루트만 잡음)
+node_modules/
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# map pipeline (1단계 배경 지도) — 대용량 산출물/바이너리, R2가 원본 저장소
+/scripts/map-pipeline/bin
+/scripts/map-pipeline/data
+
+# cloudflare-worker (1단계 배경 지도 — 타일 서빙) — wrangler 로컬 캐시/상태
+cloudflare-worker/**/.wrangler
+cloudflare-worker/**/.dev.vars

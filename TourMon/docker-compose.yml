@@ -1,0 +1,39 @@
+services:
+  postgres:
+    image: postgis/postgis:16-3.4-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # 1단계 배경 지도 — 로컬 개발용 PMTiles → XYZ 타일 HTTP 서버 (Document/temp_2.md 참고)
+  # ⚠️ 프로덕션 경로 아님(2026-08-15부로 변경) — 실제 서빙은 Cloudflare Worker(TourMon/cloudflare-worker/)가
+  # R2에서 직접 담당, mini-PC를 거치지 않음(대역폭 병목 회피, Document/init_plan.md 1단계 참고).
+  # 이 서비스는 인터넷 없이 로컬 개발/테스트할 때만 사용.
+  pmtiles-server:
+    image: protomaps/go-pmtiles
+    restart: unless-stopped
+    command:
+      [
+        "serve",
+        "/data",
+        "--port=8080",
+        "--public-url=http://localhost:${PMTILES_SERVE_PORT}/",
+      ]
+    ports:
+      - "127.0.0.1:${PMTILES_SERVE_PORT}:8080"
+    volumes:
+      - ./scripts/map-pipeline/data:/data
+
+volumes:
+  postgres_data:

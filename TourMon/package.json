@@ -1,0 +1,43 @@
+{
+  "name": "tourmon-api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "map:extract": "tsx scripts/map-pipeline/01-extract.ts",
+    "map:style": "tsx scripts/map-pipeline/02-style.ts",
+    "map:render": "tsx scripts/map-pipeline/03-render.ts",
+    "map:package": "tsx scripts/map-pipeline/04-package.ts",
+    "map:upload": "tsx scripts/map-pipeline/05-upload.ts",
+    "db:seed": "tsx scripts/seed.ts",
+    "tour:sync": "tsx scripts/tour-sync/sync.ts",
+    "tour:eng-match": "tsx scripts/tour-sync/eng-match.ts",
+    "tour:dedupe-spots": "tsx scripts/tour-sync/dedupe-spots.ts",
+    "vouchers:cleanup": "tsx scripts/cleanup-egg-vouchers.ts",
+    "worker:deploy": "npm --prefix cloudflare-worker/cloudflare run deploy"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1110.0",
+    "dotenv": "^17.4.2",
+    "drizzle-orm": "^0.45.2",
+    "jose": "^6.2.8",
+    "next": "16.3.1",
+    "postgres": "^3.4.9",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "uuid": "^14.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "drizzle-kit": "^0.31.10",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.1",
+    "tsx": "^4.23.12",
+    "typescript": "^5"
+  }
+}

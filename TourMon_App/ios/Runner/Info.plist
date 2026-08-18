@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Tourmon App</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>tourmon_app</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(FLUTTER_BUILD_NAME)</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleVersion</key>
+	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<!-- 1단계 배경 지도: 실시간 위치 표시(GPS)를 위한 위치 권한 요청 문구 -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>내 주변 관광지와 현재 위치를 지도에 표시하기 위해 위치 정보가 필요합니다.</string>
+	<!-- 4단계 부화: 걸음수 측정(파트너 알 부화 진행도)을 위한 모션/피트니스 권한 요청 문구 -->
+	<key>NSMotionUsageDescription</key>
+	<string>파트너 알을 부화시키기 위해 걸음수 측정이 필요합니다.</string>
+	<!-- ⚠️ 로컬 개발용 pmtiles-server가 평문 HTTP라서 필요 (Android는 디버그 빌드에만
+	     network_security_config로 분리 적용했지만, iOS는 이 프로젝트에 build-config별
+	     Info.plist 분리가 아직 없어 임시로 전역 적용됨 — 프로덕션(cloudflared HTTPS) 전환 시
+	     반드시 제거하거나 debug configuration 전용으로 분리할 것 -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
+	<!-- 6단계 — flutter_appauth 로그인 콜백 수신용 커스텀 URL scheme. AS `application.yml`의
+	     redirect-uri, Android manifestPlaceholders["appAuthRedirectScheme"](build.gradle.kts)와
+	     동일한 값으로 맞춰야 함(lib/config/auth_config.dart 참고). iOS 실기기/시뮬레이터 검증은
+	     아직 안 함 — 지금까지 전체 검증은 Android 에뮬레이터로만 진행(Document/init_plan.md 3~5단계). -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.tourmon.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.tourmon.app</string>
+			</array>
+		</dict>
+	</array>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>UIWindowScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>flutter</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+</dict>
+</plist>

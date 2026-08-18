@@ -1,0 +1,23 @@
+{
+  "options": {
+    "paths": {
+      "root": "..",
+      "styles": "tileserver/styles",
+      "fonts": "tileserver/fonts",
+      "sprites": "tileserver/sprites"
+    }
+  },
+  "data": {
+    "seoul_incheon_vector": {
+      "pmtiles": "data/seoul-incheon.pmtiles"
+    }
+  },
+  "styles": {
+    "light": {
+      "style": "light.json",
+      "tilejson": {
+        "type": "overlay"
+      }
+    }
+  }
+}

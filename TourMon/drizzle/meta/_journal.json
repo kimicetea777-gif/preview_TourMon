@@ -1,0 +1,69 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1786680896725,
+      "tag": "0000_faithful_logan",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786708689534,
+      "tag": "0001_dusty_plazm",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786729427383,
+      "tag": "0002_groovy_johnny_storm",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1786859564487,
+      "tag": "0003_dear_wilson_fisk",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1786883625116,
+      "tag": "0004_unknown_energizer",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1786884638159,
+      "tag": "0005_easy_luckman",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786965345467,
+      "tag": "0006_white_mulholland_black",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786965735427,
+      "tag": "0007_special_mac_gargan",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1787019685161,
+      "tag": "0008_dry_tag",
+      "breakpoints": true
+    }
+  ]
+}

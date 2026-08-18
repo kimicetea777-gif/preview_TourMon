@@ -1,0 +1,1 @@
+ALTER TABLE "tourism_spots" ADD COLUMN "member_count" integer DEFAULT 1 NOT NULL;

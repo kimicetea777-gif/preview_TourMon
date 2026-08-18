@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 140">
+  <!-- 스케치 느낌의 이중선(연필로 두 번 그은 느낌) -->
+  <path d="M62,18 C88,18 108,44 110,76 C112,108 92,132 62,132 C32,132 12,108 14,76 C16,44 36,18 62,18 Z"
+        fill="none" stroke="#60A5FA" stroke-width="1.5" opacity="0.35" stroke-linejoin="round"/>
+  <path d="M60,16 C86,16 106,42 108,74 C110,106 90,130 60,130 C30,130 10,106 12,74 C14,42 34,16 60,16 Z"
+        fill="#EFF6FF" stroke="#60A5FA" stroke-width="3" stroke-linejoin="round"/>
+
+  <!-- 자연스러운 알 무늬(반점) -->
+  <ellipse cx="42" cy="55" rx="4" ry="2.5" fill="#60A5FA" opacity="0.55" transform="rotate(-20 42 55)"/>
+  <ellipse cx="75" cy="68" rx="3.5" ry="2.2" fill="#60A5FA" opacity="0.45" transform="rotate(15 75 68)"/>
+  <ellipse cx="52" cy="95" rx="3" ry="2" fill="#60A5FA" opacity="0.45" transform="rotate(-10 52 95)"/>
+  <ellipse cx="68" cy="105" rx="2.5" ry="1.8" fill="#60A5FA" opacity="0.4" transform="rotate(20 68 105)"/>
+  <ellipse cx="38" cy="88" rx="2.5" ry="1.6" fill="#60A5FA" opacity="0.4" transform="rotate(5 38 88)"/>
+
+  <!-- 연필 해칭(사선 빗금)로 스케치 질감 -->
+  <g stroke="#60A5FA" stroke-width="1.2" opacity="0.35" stroke-linecap="round">
+    <path d="M18,102 L25,99"/>
+    <path d="M16,109 L23,106"/>
+    <path d="M19,116 L26,113"/>
+  </g>
+</svg>
