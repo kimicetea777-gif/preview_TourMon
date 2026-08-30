@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "android": {
+    "minSupportedBuild": 0,
+    "latestBuild": 15,
+    "updateUrl": "https://play.google.com/store/apps/details?id=com.tourmon.mobile"
+  },
+  "notices": [
+    
+  ]
+}

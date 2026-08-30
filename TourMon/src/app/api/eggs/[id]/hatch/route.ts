@@ -1,7 +1,7 @@
 // 6단계 Phase 5 — 회원 대상 서버 authoritative 부화. 게스트는 여전히 클라이언트가 로컬로
 // determineMonster()를 굴리지만(순수 확률 계산이라 서버가 반드시 필요한 이유가 없음), 회원은
-// 걸음수 조작/몬스터 조작을 둘 다 막아야 해서 서버가 목표 달성 판정+몬스터 결정을 직접 함
-// (init_plan.md 4-3 "목표 걸음수 달성 판정 및 부화 처리" 🖥️🔐, 3단계 후속 논의에서 이미 정한 원칙).
+// 거리 조작/몬스터 조작을 둘 다 막아야 해서 서버가 목표 달성 판정+몬스터 결정을 직접 함
+// (init_plan.md 4-3 "목표 거리 달성 판정 및 부화 처리" 🖥️🔐, 3단계 후속 논의에서 이미 정한 원칙).
 import { and, eq, inArray } from "drizzle-orm";
 import { v7 as uuidv7 } from "uuid";
 import type { NextRequest } from "next/server";
@@ -17,6 +17,7 @@ import {
   userMonsters,
 } from "@/db/schema";
 import { verifyAccessToken } from "@/lib/auth";
+import { isUniqueViolation } from "@/lib/db-errors";
 import { localesToFetch, pickTranslation, resolveLocale } from "@/lib/locale";
 import { determineMonster } from "@/lib/monster-determination";
 
@@ -44,8 +45,8 @@ export async function POST(
       return { status: 409 as const, error: "이미 부화한 알" };
     }
     // 클라이언트가 보낸 값이 아니라 서버가 직접 누적해온 값으로 판정 — 이 엔드포인트의 존재 이유.
-    if (egg.stepsAccumulated < egg.targetSteps) {
-      return { status: 422 as const, error: "목표 걸음수 미달" };
+    if (egg.distanceAccumulatedMeters < egg.targetDistanceMeters) {
+      return { status: 422 as const, error: "목표 거리 미달" };
     }
 
     const [eggType] = await tx
@@ -128,6 +129,14 @@ export async function POST(
         description: translation?.description ?? null,
       },
     };
+  }).catch((err) => {
+    // user_monsters.egg_id UNIQUE 위반 — migrate 경로가 이 알의 몬스터를 이미 만들어 둔 뒤
+    // (알 row의 hatchedAt은 갱신 못 하고 함수가 중단된 케이스 등) 부화가 재시도된 경우.
+    // 몬스터가 이미 존재하므로 부화는 사실상 끝난 상태 — 재부화 대신 409로 응답(Document/temp.md 이슈 1).
+    if (isUniqueViolation(err)) {
+      return { status: 409 as const, error: "이미 부화한 알" };
+    }
+    throw err;
   });
 
   if (result.status !== 200) {

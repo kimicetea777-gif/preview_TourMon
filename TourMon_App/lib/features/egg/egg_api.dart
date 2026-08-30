@@ -21,7 +21,7 @@ class AcquiredEggResult {
   final String id;
   final int eggTypeId;
   final String rarity;
-  final int targetSteps;
+  final int targetDistanceMeters;
   final String name;
   final String? description;
 
@@ -29,7 +29,7 @@ class AcquiredEggResult {
     required this.id,
     required this.eggTypeId,
     required this.rarity,
-    required this.targetSteps,
+    required this.targetDistanceMeters,
     required this.name,
     required this.description,
   });
@@ -39,7 +39,7 @@ class AcquiredEggResult {
       id: json['id'] as String,
       eggTypeId: json['eggTypeId'] as int,
       rarity: json['rarity'] as String,
-      targetSteps: json['targetSteps'] as int,
+      targetDistanceMeters: json['targetDistanceMeters'] as int,
       name: json['name'] as String,
       description: json['description'] as String?,
     );

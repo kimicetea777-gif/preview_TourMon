@@ -25,9 +25,8 @@ export async function GET(request: NextRequest) {
         tourismSpotId: userEggs.tourismSpotId,
         tourismSpotTitle: tourismSpots.title,
         contentTypeId: tourismSpots.contentTypeId,
-        targetSteps: userEggs.targetSteps,
-        stepsAccumulated: userEggs.stepsAccumulated,
-        isPartner: userEggs.isPartner,
+        targetDistanceMeters: userEggs.targetDistanceMeters,
+        distanceAccumulatedMeters: userEggs.distanceAccumulatedMeters,
         acquiredAt: userEggs.acquiredAt,
       })
       .from(userEggs)
@@ -57,9 +56,8 @@ export async function GET(request: NextRequest) {
         tourismSpotId: r.tourismSpotId,
         tourismSpotTitle: r.tourismSpotTitle,
         contentTypeId: r.contentTypeId,
-        targetSteps: r.targetSteps,
-        stepsAccumulated: r.stepsAccumulated,
-        isPartner: r.isPartner,
+        targetDistanceMeters: r.targetDistanceMeters,
+        distanceAccumulatedMeters: r.distanceAccumulatedMeters,
         acquiredAt: r.acquiredAt,
         name: translation?.name ?? r.rarity,
         description: translation?.description ?? null,

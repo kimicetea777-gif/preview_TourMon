@@ -49,3 +49,7 @@ next-env.d.ts
 # cloudflare-worker (1단계 배경 지도 — 타일 서빙) — wrangler 로컬 캐시/상태
 cloudflare-worker/**/.wrangler
 cloudflare-worker/**/.dev.vars
+
+# 미니PC 배포용 docker save 산출물(how_to_build.md, docker-compose.yml app 서비스 주석 참고) —
+# 수십~수백MB짜리 바이너리라 git에 넣으면 저장소가 영구적으로 불어남, scp로만 전달.
+*.tar.gz

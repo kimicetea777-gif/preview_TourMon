@@ -70,10 +70,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get hatchNotReadyMessage =>
-      'Your step count hasn\'t synced to the server yet. Please try again shortly.';
+      'Your distance hasn\'t synced to the server yet. Please try again shortly.';
 
   @override
   String get hatchAlreadyDoneMessage => 'This egg has already hatched.';
+
+  @override
+  String get hatchEggNotOnAccountMessage =>
+      'This egg is still being linked to your account. Please try again shortly.';
 
   @override
   String hatchFailedMessage(String error) {
@@ -91,15 +95,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get hatchButton => 'Hatch';
 
   @override
-  String stepsProgress(String rarity, int current, int target) {
-    return '$rarity · $current/$target';
+  String distanceProgress(String rarity, String current, String target) {
+    return '$rarity · ${current}km/${target}km';
   }
 
   @override
   String get eggInfoButtonTooltip => 'Egg info';
 
   @override
-  String get eggInfoTargetStepsLabel => 'Target steps';
+  String get partnerToggleLabel => 'Partner';
+
+  @override
+  String get partnerToggleTooltip =>
+      'Check to accumulate walking distance on this egg';
+
+  @override
+  String get eggInfoTargetDistanceLabel => 'Target distance';
 
   @override
   String get eggInfoHatchOddsTitle => 'Monster rarity odds on hatch';
@@ -107,6 +118,49 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String eggInfoLoadFailedMessage(String error) {
     return 'Couldn\'t load info: $error';
+  }
+
+  @override
+  String get eggOddsOverviewButtonTooltip => 'Odds by egg grade';
+
+  @override
+  String get eggOddsOverviewTitle => 'Monster odds by egg grade';
+
+  @override
+  String guestEggShelfLifeBanner(int days) {
+    return 'Until you sign in, an egg hardens and can no longer hatch $days days after you get it. Sign in to keep your eggs on your account for good.';
+  }
+
+  @override
+  String guestEggExpiresInDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Hardens in $days days',
+      one: 'Hardens in 1 day',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get guestEggExpiresTodayLabel => 'Hardens after today';
+
+  @override
+  String get guestEggExpiredLabel => 'Hardened — can\'t hatch';
+
+  @override
+  String get guestEggExpiredHatchAttemptMessage =>
+      'This egg seems to have already hardened. Removed it from your storage.';
+
+  @override
+  String get discardExpiredEggButton => 'Clear';
+
+  @override
+  String get guestEggDiscardedMessage => 'Cleared the hardened egg.';
+
+  @override
+  String eggInfoGuestShelfLifeNote(int days) {
+    return 'Until you sign in, this egg can only be hatched within $days days of getting it.';
   }
 
   @override
@@ -140,6 +194,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get acquireEggButton => 'Get Egg';
 
   @override
+  String get acquireEggDisabledButton => 'Egg Unavailable';
+
+  @override
   String get eggAcquisitionDisabledMessage =>
       'Lodging, restaurants, and shops don\'t offer eggs.';
 
@@ -150,6 +207,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String detailLoadFailedMessage(String error) {
     return 'Couldn\'t load details: $error';
   }
+
+  @override
+  String get noEnglishTranslationLabel =>
+      'English description: No English translation available';
 
   @override
   String dexCountLabel(int caught, int total) {
@@ -272,6 +333,18 @@ class AppLocalizationsEn extends AppLocalizations {
       'Location permission is required to use this feature.';
 
   @override
+  String get locationPermissionDeniedForeverMessage =>
+      'Location permission is permanently denied. Enable it in your device Settings > Apps > Permissions.';
+
+  @override
+  String get outOfServiceAreaMessage =>
+      'You\'re outside the Seoul/Incheon service area — the map won\'t display correctly here.';
+
+  @override
+  String get locationTrackingStoppedMessage =>
+      'Location tracking stopped — location access was interrupted.';
+
+  @override
   String get tourismDataSyncingMessage => 'Downloading tourist spot data...';
 
   @override
@@ -303,6 +376,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get languageEnglishOption => 'English';
 
   @override
+  String get appNotWorkingLabel => 'App not working?';
+
+  @override
   String get tourismResyncTitle => 'Resync tourist spot data';
 
   @override
@@ -314,8 +390,8 @@ class AppLocalizationsEn extends AppLocalizations {
       'Tourist spot data has been refreshed. Please restart the app.';
 
   @override
-  String partnerEggStepsLabel(int current, int target) {
-    return '$current/$target';
+  String partnerEggDistanceLabel(String current, String target) {
+    return '${current}km/${target}km';
   }
 
   @override
@@ -325,6 +401,97 @@ class AppLocalizationsEn extends AppLocalizations {
   String todayCaloriesLabel(int kcal) {
     return '${kcal}kcal';
   }
+
+  @override
+  String get syncDistanceNowTooltip => 'Sync distance now';
+
+  @override
+  String get distanceRefreshInfoTooltip => 'About the distance update interval';
+
+  @override
+  String get distanceRefreshInfoTitle => 'Distance update interval';
+
+  @override
+  String distanceRefreshInfoBody(int minutes) {
+    return 'Walking distance updates only about every $minutes minutes to reduce battery drain. To reflect it right now, tap the refresh button (⟳) or pull the list down.';
+  }
+
+  @override
+  String distanceRefreshEveryMinutes(int minutes) {
+    return 'Updates about every $minutes min to save battery';
+  }
+
+  @override
+  String get distanceRefreshedJustNow => 'Just updated';
+
+  @override
+  String distanceRefreshedMinutesAgo(int minutes) {
+    return 'Updated $minutes min ago';
+  }
+
+  @override
+  String distanceRefreshedHoursAgo(int hours) {
+    return 'Updated $hours hr ago';
+  }
+
+  @override
+  String get distanceRefreshNeverSynced => 'Not updated yet';
+
+  @override
+  String get onboardingSkipButton => 'Skip';
+
+  @override
+  String get onboardingNextButton => 'Next';
+
+  @override
+  String get onboardingStartButton => 'Get started';
+
+  @override
+  String get onboardingCloseButton => 'Close';
+
+  @override
+  String get onboardingSpotTitle => 'Collect eggs at spots';
+
+  @override
+  String get onboardingSpotBody =>
+      'Get close to a tourist spot marker on the map to pick up an egg. Once per spot each day.';
+
+  @override
+  String get onboardingPartnerTitle => 'Set a partner egg';
+
+  @override
+  String get onboardingPartnerBody =>
+      'In the egg box, pick up to 2 partner eggs to walk with.';
+
+  @override
+  String get onboardingWalkTitle => 'Walk to build distance';
+
+  @override
+  String get onboardingWalkBody =>
+      'Your partner eggs grow with every step. Distance updates every few minutes to save battery.';
+
+  @override
+  String get onboardingHatchTitle => 'Hatch!';
+
+  @override
+  String get onboardingHatchBody =>
+      'Fill the target distance and the egg hatches — the monster joins your collection.';
+
+  @override
+  String get howToPlayTitle => 'How to play';
+
+  @override
+  String get updateRequiredTitle => 'Update required';
+
+  @override
+  String get updateRequiredBody =>
+      'This version is no longer supported. Please update to the latest version to continue.';
+
+  @override
+  String get updateRequiredButton => 'Update';
+
+  @override
+  String get noticeDismissTooltip => 'Dismiss notice';
 
   @override
   String get expandPartnerEggBoxTooltip => 'Expand partner egg progress';
@@ -343,7 +510,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get unlinkExplanationMessage =>
-      'To disconnect TourMon from your account, go to the account management page, find TourMon under \"Connected Services\", and tap \"Disconnect\". Disconnecting blocks login immediately.';
+      'To disconnect TourMon from your account, go to the account management page, find TourMon under \"Connected Services\", and tap \"Disconnect\". Disconnecting blocks login immediately, and your personal data will be destroyed after 32 days.';
 
   @override
   String get unlinkButtonLabel => 'Go to Account Management';
@@ -352,4 +519,49 @@ class AppLocalizationsEn extends AppLocalizations {
   String unlinkLaunchFailedMessage(String error) {
     return 'Couldn\'t open the page: $error';
   }
+
+  @override
+  String get legalLinksSectionTitle => 'Terms & Policies';
+
+  @override
+  String get viewTermsOfServiceLabel => 'View Terms of Service';
+
+  @override
+  String get viewPrivacyPolicyLabel => 'View Privacy Policy';
+
+  @override
+  String get viewCreditsLabel => 'View Data Sources & Licenses';
+
+  @override
+  String get tourApiAttribution =>
+      'Tourism info & photos: ⓒ Korea Tourism Organization (TourAPI)';
+
+  @override
+  String get healthConnectConnectPrompt =>
+      'Distance isn\'t counting — connect Health Connect';
+
+  @override
+  String get healthConnectNoticeDialogTitle => 'Health Connect Access';
+
+  @override
+  String get healthConnectNoticeBodyMessage =>
+      'Partner eggs grow based on the distance you actually walk. That distance comes from Health Connect — Android\'s shared, manufacturer-independent health data store (data recorded by other health apps like Google Fit or Samsung Health also flows into it, not just one maker\'s app). Continuing will take you to the Health Connect install screen if it\'s missing, or a permission request if it\'s already installed.';
+
+  @override
+  String get healthConnectDeniedPartnerCancelledMessage =>
+      'Partner assignment cancelled — Health Connect access is required, since partner eggs grow from the distance you walk.';
+
+  @override
+  String get locationConsentDialogTitle => 'Location Data & Age Confirmation';
+
+  @override
+  String get locationConsentBodyMessage =>
+      'When you acquire an egg, TourMon uses your location in real time only to verify you\'re near the tourist spot, and does not store it. You can withdraw this consent anytime by turning off location permission in your device settings, though this will disable egg acquisition and other location-based features. See the Privacy Policy on the My Page screen for details.';
+
+  @override
+  String get locationConsentAgreeCheckboxLabel =>
+      'I agree to the collection and use of location data';
+
+  @override
+  String get ageConsentCheckboxLabel => 'I am 14 years of age or older';
 }

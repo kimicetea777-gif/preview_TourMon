@@ -2,7 +2,8 @@ import 'package:sqflite/sqflite.dart';
 
 import 'app_database.dart';
 
-/// 단순 key-value 로컬 설정 저장소 — 4단계에서 pedometer 기준선(last_raw_step_count) 저장용으로 도입.
+/// 단순 key-value 로컬 설정 저장소 — 4단계에서 걸음수 기준선 저장용으로 도입, Health Connect
+/// 전환(Document/temp.md "통합 결정") 후엔 거리 동기화 기준 시각(distance_last_synced_at) 등을 저장.
 class AppSettingsRepository {
   const AppSettingsRepository();
 

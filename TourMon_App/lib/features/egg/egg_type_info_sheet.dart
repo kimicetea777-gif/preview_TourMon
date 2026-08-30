@@ -1,17 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../../config/game_config.dart';
 import '../../l10n/api_locale.dart';
 import '../../l10n/app_localizations.dart';
 import '../../l10n/enum_labels.dart';
+import '../auth/auth_session.dart';
 import '../monster/monster_config_api.dart';
 import '../monster/monster_determination.dart';
 import '../monster/rarity_colors.dart';
+import 'distance_format.dart';
 import 'egg_image.dart';
 import 'user_egg.dart';
 
 const _rarityOrder = ['common', 'rare', 'epic', 'legendary'];
 
-/// 알 카드의 정보 버튼 → 목표 걸음 수 + 부화 시 몬스터 등급별 확률을 보여주는 바텀시트
+/// 알 카드의 정보 버튼 → 목표 거리 + 부화 시 몬스터 등급별 확률을 보여주는 바텀시트
 /// (Document/temp.md 참고). 확률은 `monsterRarityProbabilities()`로 실제 `determineMonster()`
 /// 계산을 그대로 재현 — 꾸며낸 수치가 아니라 실제 부화 로직과 항상 일치.
 class EggTypeInfoSheet extends StatefulWidget {
@@ -36,7 +40,9 @@ class _EggTypeInfoSheetState extends State<EggTypeInfoSheet> {
   }
 
   Future<Map<String, double>> _load() async {
-    final config = await _monsterConfigApi.fetchConfig(locale: apiLocaleOf(context));
+    final config = await _monsterConfigApi.fetchConfig(
+      locale: apiLocaleOf(context),
+    );
     return monsterRarityProbabilities(widget.egg.rarity, config);
   }
 
@@ -59,7 +65,10 @@ class _EggTypeInfoSheetState extends State<EggTypeInfoSheet> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(egg.name, style: Theme.of(context).textTheme.titleLarge),
+                      Text(
+                        egg.name,
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
                       Text(
                         rarityLabel(context, egg.rarity),
                         style: Theme.of(context).textTheme.bodyMedium,
@@ -70,9 +79,38 @@ class _EggTypeInfoSheetState extends State<EggTypeInfoSheet> {
               ],
             ),
             const SizedBox(height: 20),
-            _InfoRow(label: l10n.eggInfoTargetStepsLabel, value: '${egg.targetSteps}'),
+            _InfoRow(
+              label: l10n.eggInfoTargetDistanceLabel,
+              value: '${formatKm(egg.targetDistanceMeters)}km',
+            ),
+            if (!context.watch<AuthSession>().isLoggedIn) ...[
+              const SizedBox(height: 10),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.hourglass_bottom,
+                    size: 15,
+                    color: Theme.of(context).colorScheme.onSurface
+                        .withValues(alpha: 0.6),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      l10n.eggInfoGuestShelfLifeNote(
+                        GameConfig.guestEggShelfLife.inDays,
+                      ),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 20),
-            Text(l10n.eggInfoHatchOddsTitle, style: Theme.of(context).textTheme.titleSmall),
+            Text(
+              l10n.eggInfoHatchOddsTitle,
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
             const SizedBox(height: 4),
             FutureBuilder<Map<String, double>>(
               future: _probabilitiesFuture,
@@ -92,13 +130,20 @@ class _EggTypeInfoSheetState extends State<EggTypeInfoSheet> {
                 if (snapshot.hasError) {
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Text(l10n.eggInfoLoadFailedMessage('${snapshot.error}')),
+                    child: Text(
+                      l10n.eggInfoLoadFailedMessage('${snapshot.error}'),
+                    ),
                   );
                 }
                 final probabilities = snapshot.data!;
+                // 알 등급 이상만 — 부화 로직상 낮은 등급 몬스터는 확률 0이라 표시해도 "0%"만 나옴.
+                final startIndex = _rarityOrder.indexOf(egg.rarity);
+                final shownRarities = startIndex >= 0
+                    ? _rarityOrder.sublist(startIndex)
+                    : _rarityOrder;
                 return Column(
                   children: [
-                    for (final rarity in _rarityOrder)
+                    for (final rarity in shownRarities)
                       _OddsRow(
                         color: rarityColor(rarity),
                         label: rarityLabel(context, rarity),
@@ -129,9 +174,7 @@ class _InfoRow extends StatelessWidget {
         Text(label, style: Theme.of(context).textTheme.bodyMedium),
         Text(
           value,
-          style: Theme.of(context)
-              .textTheme
-              .bodyMedium
+          style: Theme.of(context).textTheme.bodyMedium
               ?.copyWith(fontWeight: FontWeight.w600),
         ),
       ],
@@ -144,7 +187,11 @@ class _OddsRow extends StatelessWidget {
   final String label;
   final double percent;
 
-  const _OddsRow({required this.color, required this.label, required this.percent});
+  const _OddsRow({
+    required this.color,
+    required this.label,
+    required this.percent,
+  });
 
   @override
   Widget build(BuildContext context) {

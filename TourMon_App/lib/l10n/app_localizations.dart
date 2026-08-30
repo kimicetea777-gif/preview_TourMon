@@ -197,7 +197,7 @@ abstract class AppLocalizations {
   /// No description provided for @hatchNotReadyMessage.
   ///
   /// In ko, this message translates to:
-  /// **'서버에 걸음수 동기화가 아직 반영되지 않았습니다. 잠시 후 다시 시도해 주세요.'**
+  /// **'서버에 거리 동기화가 아직 반영되지 않았습니다. 잠시 후 다시 시도해 주세요.'**
   String get hatchNotReadyMessage;
 
   /// No description provided for @hatchAlreadyDoneMessage.
@@ -205,6 +205,12 @@ abstract class AppLocalizations {
   /// In ko, this message translates to:
   /// **'이미 부화한 알입니다.'**
   String get hatchAlreadyDoneMessage;
+
+  /// No description provided for @hatchEggNotOnAccountMessage.
+  ///
+  /// In ko, this message translates to:
+  /// **'이 알을 계정으로 옮기는 중입니다. 잠시 후 다시 시도해 주세요.'**
+  String get hatchEggNotOnAccountMessage;
 
   /// No description provided for @hatchFailedMessage.
   ///
@@ -230,11 +236,11 @@ abstract class AppLocalizations {
   /// **'부화하기'**
   String get hatchButton;
 
-  /// No description provided for @stepsProgress.
+  /// No description provided for @distanceProgress.
   ///
   /// In ko, this message translates to:
-  /// **'{rarity} · {current}/{target}'**
-  String stepsProgress(String rarity, int current, int target);
+  /// **'{rarity} · {current}km/{target}km'**
+  String distanceProgress(String rarity, String current, String target);
 
   /// No description provided for @eggInfoButtonTooltip.
   ///
@@ -242,11 +248,23 @@ abstract class AppLocalizations {
   /// **'알 정보'**
   String get eggInfoButtonTooltip;
 
-  /// No description provided for @eggInfoTargetStepsLabel.
+  /// No description provided for @partnerToggleLabel.
   ///
   /// In ko, this message translates to:
-  /// **'목표 걸음 수'**
-  String get eggInfoTargetStepsLabel;
+  /// **'파트너'**
+  String get partnerToggleLabel;
+
+  /// No description provided for @partnerToggleTooltip.
+  ///
+  /// In ko, this message translates to:
+  /// **'체크하면 이 알에 걷기 거리가 쌓입니다'**
+  String get partnerToggleTooltip;
+
+  /// No description provided for @eggInfoTargetDistanceLabel.
+  ///
+  /// In ko, this message translates to:
+  /// **'목표 거리'**
+  String get eggInfoTargetDistanceLabel;
 
   /// No description provided for @eggInfoHatchOddsTitle.
   ///
@@ -259,6 +277,66 @@ abstract class AppLocalizations {
   /// In ko, this message translates to:
   /// **'정보를 불러오지 못했습니다: {error}'**
   String eggInfoLoadFailedMessage(String error);
+
+  /// No description provided for @eggOddsOverviewButtonTooltip.
+  ///
+  /// In ko, this message translates to:
+  /// **'알 등급별 확률'**
+  String get eggOddsOverviewButtonTooltip;
+
+  /// No description provided for @eggOddsOverviewTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'알 등급별 몬스터 확률'**
+  String get eggOddsOverviewTitle;
+
+  /// No description provided for @guestEggShelfLifeBanner.
+  ///
+  /// In ko, this message translates to:
+  /// **'로그인하지 않은 알은 획득 후 {days}일이 지나면 굳어서 부화할 수 없게 돼요. 로그인하면 계정에 영구 보관됩니다.'**
+  String guestEggShelfLifeBanner(int days);
+
+  /// No description provided for @guestEggExpiresInDays.
+  ///
+  /// In ko, this message translates to:
+  /// **'{days, plural, =1{하루 뒤 굳어요} other{{days}일 뒤 굳어요}}'**
+  String guestEggExpiresInDays(int days);
+
+  /// No description provided for @guestEggExpiresTodayLabel.
+  ///
+  /// In ko, this message translates to:
+  /// **'오늘 지나면 굳어요'**
+  String get guestEggExpiresTodayLabel;
+
+  /// No description provided for @guestEggExpiredLabel.
+  ///
+  /// In ko, this message translates to:
+  /// **'굳어서 부화할 수 없어요'**
+  String get guestEggExpiredLabel;
+
+  /// No description provided for @guestEggExpiredHatchAttemptMessage.
+  ///
+  /// In ko, this message translates to:
+  /// **'알이 이미 굳어버린 것 같습니다. 보관함에서 치웠어요.'**
+  String get guestEggExpiredHatchAttemptMessage;
+
+  /// No description provided for @discardExpiredEggButton.
+  ///
+  /// In ko, this message translates to:
+  /// **'치우기'**
+  String get discardExpiredEggButton;
+
+  /// No description provided for @guestEggDiscardedMessage.
+  ///
+  /// In ko, this message translates to:
+  /// **'굳은 알을 치웠어요.'**
+  String get guestEggDiscardedMessage;
+
+  /// No description provided for @eggInfoGuestShelfLifeNote.
+  ///
+  /// In ko, this message translates to:
+  /// **'로그인 전이라 획득 후 {days}일까지만 부화할 수 있어요.'**
+  String eggInfoGuestShelfLifeNote(int days);
 
   /// No description provided for @confirmButton.
   ///
@@ -308,6 +386,12 @@ abstract class AppLocalizations {
   /// **'알 획득하기'**
   String get acquireEggButton;
 
+  /// No description provided for @acquireEggDisabledButton.
+  ///
+  /// In ko, this message translates to:
+  /// **'알 획득 불가'**
+  String get acquireEggDisabledButton;
+
   /// No description provided for @eggAcquisitionDisabledMessage.
   ///
   /// In ko, this message translates to:
@@ -325,6 +409,12 @@ abstract class AppLocalizations {
   /// In ko, this message translates to:
   /// **'상세정보를 불러오지 못함: {error}'**
   String detailLoadFailedMessage(String error);
+
+  /// No description provided for @noEnglishTranslationLabel.
+  ///
+  /// In ko, this message translates to:
+  /// **'영어 설명: 영어 번역이 없어요'**
+  String get noEnglishTranslationLabel;
 
   /// No description provided for @dexCountLabel.
   ///
@@ -530,6 +620,24 @@ abstract class AppLocalizations {
   /// **'이 기능을 사용하려면 위치 권한이 필요합니다.'**
   String get locationPermissionDeniedMessage;
 
+  /// No description provided for @locationPermissionDeniedForeverMessage.
+  ///
+  /// In ko, this message translates to:
+  /// **'위치 권한이 영구적으로 거부돼 있어요. 기기 설정 > 앱 > 권한에서 위치를 허용해 주세요.'**
+  String get locationPermissionDeniedForeverMessage;
+
+  /// No description provided for @outOfServiceAreaMessage.
+  ///
+  /// In ko, this message translates to:
+  /// **'서울·인천 서비스 지역 밖이에요. 이 지역에서는 지도가 정상적으로 표시되지 않아요.'**
+  String get outOfServiceAreaMessage;
+
+  /// No description provided for @locationTrackingStoppedMessage.
+  ///
+  /// In ko, this message translates to:
+  /// **'위치 접근이 중단돼 위치 추적을 멈췄어요.'**
+  String get locationTrackingStoppedMessage;
+
   /// No description provided for @tourismDataSyncingMessage.
   ///
   /// In ko, this message translates to:
@@ -590,6 +698,12 @@ abstract class AppLocalizations {
   /// **'English'**
   String get languageEnglishOption;
 
+  /// No description provided for @appNotWorkingLabel.
+  ///
+  /// In ko, this message translates to:
+  /// **'앱이 안돼요'**
+  String get appNotWorkingLabel;
+
   /// No description provided for @tourismResyncTitle.
   ///
   /// In ko, this message translates to:
@@ -608,11 +722,11 @@ abstract class AppLocalizations {
   /// **'관광지 데이터를 새로 받았습니다. 앱을 껐다 다시 켜주세요.'**
   String get tourismResyncSuccessMessage;
 
-  /// No description provided for @partnerEggStepsLabel.
+  /// No description provided for @partnerEggDistanceLabel.
   ///
   /// In ko, this message translates to:
-  /// **'{current}/{target}'**
-  String partnerEggStepsLabel(int current, int target);
+  /// **'{current}km/{target}km'**
+  String partnerEggDistanceLabel(String current, String target);
 
   /// No description provided for @emptyPartnerSlotLabel.
   ///
@@ -625,6 +739,162 @@ abstract class AppLocalizations {
   /// In ko, this message translates to:
   /// **'{kcal}kcal'**
   String todayCaloriesLabel(int kcal);
+
+  /// No description provided for @syncDistanceNowTooltip.
+  ///
+  /// In ko, this message translates to:
+  /// **'지금 거리 동기화'**
+  String get syncDistanceNowTooltip;
+
+  /// No description provided for @distanceRefreshInfoTooltip.
+  ///
+  /// In ko, this message translates to:
+  /// **'거리 갱신 주기 안내'**
+  String get distanceRefreshInfoTooltip;
+
+  /// No description provided for @distanceRefreshInfoTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'거리 갱신 주기'**
+  String get distanceRefreshInfoTitle;
+
+  /// No description provided for @distanceRefreshInfoBody.
+  ///
+  /// In ko, this message translates to:
+  /// **'걸음 거리는 배터리 소모를 줄이기 위해 약 {minutes}분 간격으로만 갱신돼요. 지금 바로 반영하려면 새로고침 버튼(⟳)을 누르거나 목록을 아래로 당겨 주세요.'**
+  String distanceRefreshInfoBody(int minutes);
+
+  /// No description provided for @distanceRefreshEveryMinutes.
+  ///
+  /// In ko, this message translates to:
+  /// **'배터리 절약을 위해 약 {minutes}분마다 갱신돼요'**
+  String distanceRefreshEveryMinutes(int minutes);
+
+  /// No description provided for @distanceRefreshedJustNow.
+  ///
+  /// In ko, this message translates to:
+  /// **'방금 갱신됨'**
+  String get distanceRefreshedJustNow;
+
+  /// No description provided for @distanceRefreshedMinutesAgo.
+  ///
+  /// In ko, this message translates to:
+  /// **'{minutes}분 전 갱신'**
+  String distanceRefreshedMinutesAgo(int minutes);
+
+  /// No description provided for @distanceRefreshedHoursAgo.
+  ///
+  /// In ko, this message translates to:
+  /// **'{hours}시간 전 갱신'**
+  String distanceRefreshedHoursAgo(int hours);
+
+  /// No description provided for @distanceRefreshNeverSynced.
+  ///
+  /// In ko, this message translates to:
+  /// **'아직 갱신 안 됨'**
+  String get distanceRefreshNeverSynced;
+
+  /// No description provided for @onboardingSkipButton.
+  ///
+  /// In ko, this message translates to:
+  /// **'건너뛰기'**
+  String get onboardingSkipButton;
+
+  /// No description provided for @onboardingNextButton.
+  ///
+  /// In ko, this message translates to:
+  /// **'다음'**
+  String get onboardingNextButton;
+
+  /// No description provided for @onboardingStartButton.
+  ///
+  /// In ko, this message translates to:
+  /// **'시작하기'**
+  String get onboardingStartButton;
+
+  /// No description provided for @onboardingCloseButton.
+  ///
+  /// In ko, this message translates to:
+  /// **'닫기'**
+  String get onboardingCloseButton;
+
+  /// No description provided for @onboardingSpotTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'관광지에서 알 획득'**
+  String get onboardingSpotTitle;
+
+  /// No description provided for @onboardingSpotBody.
+  ///
+  /// In ko, this message translates to:
+  /// **'지도의 관광지 마커에 가까이 가면 알을 하나 얻어요. 같은 곳은 하루에 한 번.'**
+  String get onboardingSpotBody;
+
+  /// No description provided for @onboardingPartnerTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'파트너 알 등록'**
+  String get onboardingPartnerTitle;
+
+  /// No description provided for @onboardingPartnerBody.
+  ///
+  /// In ko, this message translates to:
+  /// **'알 보관함에서 함께 걸을 파트너 알을 최대 2개까지 골라요.'**
+  String get onboardingPartnerBody;
+
+  /// No description provided for @onboardingWalkTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'걸어서 거리 쌓기'**
+  String get onboardingWalkTitle;
+
+  /// No description provided for @onboardingWalkBody.
+  ///
+  /// In ko, this message translates to:
+  /// **'걸은 거리만큼 파트너 알이 자라요. 거리는 배터리 절약을 위해 몇 분마다 갱신돼요.'**
+  String get onboardingWalkBody;
+
+  /// No description provided for @onboardingHatchTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'부화!'**
+  String get onboardingHatchTitle;
+
+  /// No description provided for @onboardingHatchBody.
+  ///
+  /// In ko, this message translates to:
+  /// **'목표 거리를 채우면 알이 부화하고, 몬스터가 도감에 등록돼요.'**
+  String get onboardingHatchBody;
+
+  /// No description provided for @howToPlayTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'앱 사용법 다시 보기'**
+  String get howToPlayTitle;
+
+  /// No description provided for @updateRequiredTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'업데이트가 필요해요'**
+  String get updateRequiredTitle;
+
+  /// No description provided for @updateRequiredBody.
+  ///
+  /// In ko, this message translates to:
+  /// **'이 버전은 더 이상 지원되지 않아요. 계속하려면 최신 버전으로 업데이트해 주세요.'**
+  String get updateRequiredBody;
+
+  /// No description provided for @updateRequiredButton.
+  ///
+  /// In ko, this message translates to:
+  /// **'업데이트'**
+  String get updateRequiredButton;
+
+  /// No description provided for @noticeDismissTooltip.
+  ///
+  /// In ko, this message translates to:
+  /// **'공지 닫기'**
+  String get noticeDismissTooltip;
 
   /// No description provided for @expandPartnerEggBoxTooltip.
   ///
@@ -659,7 +929,7 @@ abstract class AppLocalizations {
   /// No description provided for @unlinkExplanationMessage.
   ///
   /// In ko, this message translates to:
-  /// **'TourMon과의 연결을 끊으려면 계정 관리 페이지로 이동해 \'연동 서비스 관리\'에서 TourMon을 찾아 \'연결 해제\'를 눌러주세요. 연결을 해제하면 로그인이 즉시 차단됩니다.'**
+  /// **'TourMon과의 연결을 끊으려면 계정 관리 페이지로 이동해 \'연동 서비스 관리\'에서 TourMon을 찾아 \'연결 해제\'를 눌러주세요. 연결을 해제하면 로그인은 즉시 차단되고, 보유하신 개인정보는 32일 후 파기됩니다.'**
   String get unlinkExplanationMessage;
 
   /// No description provided for @unlinkButtonLabel.
@@ -673,6 +943,84 @@ abstract class AppLocalizations {
   /// In ko, this message translates to:
   /// **'페이지를 열지 못했습니다: {error}'**
   String unlinkLaunchFailedMessage(String error);
+
+  /// No description provided for @legalLinksSectionTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'약관 및 정책'**
+  String get legalLinksSectionTitle;
+
+  /// No description provided for @viewTermsOfServiceLabel.
+  ///
+  /// In ko, this message translates to:
+  /// **'이용약관 보기'**
+  String get viewTermsOfServiceLabel;
+
+  /// No description provided for @viewPrivacyPolicyLabel.
+  ///
+  /// In ko, this message translates to:
+  /// **'개인정보처리방침 보기'**
+  String get viewPrivacyPolicyLabel;
+
+  /// No description provided for @viewCreditsLabel.
+  ///
+  /// In ko, this message translates to:
+  /// **'데이터 출처 및 라이선스 보기'**
+  String get viewCreditsLabel;
+
+  /// No description provided for @tourApiAttribution.
+  ///
+  /// In ko, this message translates to:
+  /// **'관광정보·사진 출처: ⓒ한국관광공사 (TourAPI)'**
+  String get tourApiAttribution;
+
+  /// No description provided for @healthConnectConnectPrompt.
+  ///
+  /// In ko, this message translates to:
+  /// **'걸은 거리가 안 잡혀요 — Health Connect 연결하기'**
+  String get healthConnectConnectPrompt;
+
+  /// No description provided for @healthConnectNoticeDialogTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'Health Connect 연동 안내'**
+  String get healthConnectNoticeDialogTitle;
+
+  /// No description provided for @healthConnectNoticeBodyMessage.
+  ///
+  /// In ko, this message translates to:
+  /// **'파트너 알은 실제로 걸은 거리만큼 자라나요. 이 거리는 특정 제조사 앱이 아니라, 안드로이드가 제공하는 공용 건강 데이터 저장소 \'Health Connect\'에서 가져와요(구글 핏·삼성 헬스 등 다른 건강 앱이 기록한 데이터도 여기 함께 모여요). 계속하면 Health Connect가 없는 경우 설치 화면으로, 있는 경우 권한 요청 화면으로 넘어가요.'**
+  String get healthConnectNoticeBodyMessage;
+
+  /// No description provided for @healthConnectDeniedPartnerCancelledMessage.
+  ///
+  /// In ko, this message translates to:
+  /// **'Health Connect 권한이 없어 파트너 지정을 취소했어요. 파트너 알은 걸은 거리로 자라기 때문에 권한이 필요해요.'**
+  String get healthConnectDeniedPartnerCancelledMessage;
+
+  /// No description provided for @locationConsentDialogTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'위치정보 및 이용 연령 확인'**
+  String get locationConsentDialogTitle;
+
+  /// No description provided for @locationConsentBodyMessage.
+  ///
+  /// In ko, this message translates to:
+  /// **'알 획득 시 관광지 반경 확인을 위해 위치정보를 실시간으로만 사용하며 저장하지 않습니다. 위치 권한은 기기 설정에서 언제든 꺼서 동의를 철회할 수 있으며, 이 경우 알 획득 등 위치 기반 기능을 이용할 수 없습니다. 자세한 내용은 마이페이지의 개인정보처리방침을 참고하세요.'**
+  String get locationConsentBodyMessage;
+
+  /// No description provided for @locationConsentAgreeCheckboxLabel.
+  ///
+  /// In ko, this message translates to:
+  /// **'위치정보 수집·이용에 동의합니다'**
+  String get locationConsentAgreeCheckboxLabel;
+
+  /// No description provided for @ageConsentCheckboxLabel.
+  ///
+  /// In ko, this message translates to:
+  /// **'만 14세 이상입니다'**
+  String get ageConsentCheckboxLabel;
 }
 
 class _AppLocalizationsDelegate

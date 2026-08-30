@@ -65,6 +65,10 @@ class EggRepository {
   /// 마이그레이션 시 위조 검증 대조 키로 쓰이므로 게스트/로그인 구분 없이 항상 서버 값을 그대로
   /// 써야 함, Document/study_folder/6-4_게스트 회원가입 마이그레이션.md). 없으면(예: 미래에 서버 없이 로컬만 쓰는 경로가 생기면)
   /// 기존처럼 자체 생성 — acquire 경로는 이제 항상 값을 주므로 사실상 fallback용.
+  ///
+  /// [syncedAt]을 주면(로그인 상태 획득 — acquire 라우트가 같은 id로 서버 user_eggs row도 이미
+  /// 생성함) 로컬 row에 이관 완료 시각을 박아 다음 로그인의 마이그레이션 대상에서 뺌. 안 주면
+  /// (게스트 획득) NULL로 남아 마이그레이션 대상이 됨.
   Future<UserEgg> insertEgg({
     required int tourismSpotId,
     required String? tourismSpotTitle,
@@ -73,8 +77,9 @@ class EggRepository {
     required String rarity,
     required String name,
     required String? description,
-    required int targetSteps,
+    required int targetDistanceMeters,
     String? overrideId,
+    DateTime? syncedAt,
   }) async {
     final egg = UserEgg(
       id: overrideId ?? _uuid.v7(),
@@ -85,14 +90,17 @@ class EggRepository {
       rarity: rarity,
       name: name,
       description: description,
-      targetSteps: targetSteps,
-      stepsAccumulated: 0,
+      targetDistanceMeters: targetDistanceMeters,
+      distanceAccumulatedMeters: 0,
       isPartner: false,
       acquiredAt: DateTime.now(),
       hatchedAt: null,
     );
     final db = await AppDatabase.instance.database;
-    await db.insert('user_eggs', egg.toMap());
+    await db.insert('user_eggs', {
+      ...egg.toMap(),
+      if (syncedAt != null) 'synced_at': syncedAt.toIso8601String(),
+    });
     return egg;
   }
 
@@ -103,29 +111,151 @@ class EggRepository {
   Future<void> upsertFromServer(List<UserEgg> eggs) async {
     if (eggs.isEmpty) return;
     final db = await AppDatabase.instance.database;
+    // 서버에서 받아온 알이므로 이미 서버에 존재함 — synced_at을 채워서 다음 로그인 때
+    // migrateIfNeeded가 이 알들을 다시 밀어올리지 않게 함(밀어올려도 already_done으로
+    // 무해하지만, 재설치 복구 직후 첫 로그인의 불필요한 대량 재전송을 피함).
+    final syncedAt = DateTime.now().toIso8601String();
     final batch = db.batch();
     for (final egg in eggs) {
-      batch.insert('user_eggs', egg.toMap(), conflictAlgorithm: ConflictAlgorithm.ignore);
+      batch.insert('user_eggs', {
+        ...egg.toMap(),
+        'synced_at': syncedAt,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      // Part 3-B(Document/temp.md) — 이미 로컬에 있어 insert가 ignore된 알도 부화 판정 기준값
+      // (서버 PG)에 수렴시킴. 회원은 distance_accumulated_meters가 서버 authoritative: 로컬이
+      // 속도 클램프/유실/mock 감지로 서버보다 앞서 있으면 "부화 준비 완료"를 보고 눌렀다가
+      // 서버 부화에서 422를 맞는 불일치가 생김(재로그인/새 기기 시점 정합). 방금 insert된 알은
+      // 이미 같은 값이라 이 update가 무해(멱등). is_partner 등 다른 로컬 필드는 안 건드림.
+      batch.update(
+        'user_eggs',
+        {'distance_accumulated_meters': egg.distanceAccumulatedMeters},
+        where: 'id = ?',
+        whereArgs: [egg.id],
+      );
     }
+    await batch.commit(noResult: true);
+    // 이미 로컬에 있던(그래서 ignore된) 알도 서버 존재가 확인된 것이므로 synced_at을 채움.
+    await markSynced(eggs.map((e) => e.id));
+  }
+
+  /// Part 1(Document/temp.md) — `POST /api/distance/sync`에 실어보낼 "이번에 거리를 적립할 알"
+  /// id 목록. 서버엔 파트너 개념이 없어(파트너 = 순수 기기 로컬) 클라가 매 sync마다 현재 파트너
+  /// 알 id를 직접 넘긴다. 로컬 `addDistanceToPartners()`와 동일한 필터(is_partner=1, 미부화).
+  Future<List<String>> getPartnerEggIds() async {
+    final db = await AppDatabase.instance.database;
+    final rows = await db.query(
+      'user_eggs',
+      columns: ['id'],
+      where: 'is_partner = 1 AND hatched_at IS NULL',
+    );
+    return rows.map((r) => r['id'] as String).toList();
+  }
+
+  /// Part 3-A(Document/temp.md) — `POST /api/distance/sync` 응답으로 받은 서버 누적 거리를 파트너
+  /// 알 로컬 값에 그대로 덮어씀(max 아님, 서버 우선). 서버가 속도 클램프로 초과분을 잘라냈거나
+  /// mock 감지로 적립을 스킵한 경우, 로컬이 서버보다 앞서 "부화 준비 완료"를 표시했다가 서버
+  /// 부화에서 422를 맞는 불일치를 없앤다. 회원 경로에서 로컬 적립은 "낙관적 표시, 다음 sync에
+  /// 보정"이 됨(게스트는 서버 사본이 없어 무관 — 애초에 호출되지 않음).
+  Future<void> applyServerDistances(Map<String, int> distanceById) async {
+    if (distanceById.isEmpty) return;
+    final db = await AppDatabase.instance.database;
+    final batch = db.batch();
+    distanceById.forEach((id, meters) {
+      batch.update(
+        'user_eggs',
+        {'distance_accumulated_meters': meters},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    });
     await batch.commit(noResult: true);
   }
 
-  /// 마이그레이션(migration_service.dart의 MigrationApi가 사용)용 — 부화 여부 무관 전체 알.
-  /// voucher는 부화 여부와 무관하게 획득 시점에만 생성/소비되므로 hatched 알도 포함해서 보내야 함
+  /// 마이그레이션(migration_service.dart)용 — 아직 서버로 이관되지 않은(synced_at IS NULL) 알만.
+  /// 부화 여부와 무관하게 포함: voucher는 부화 여부와 상관없이 획득 시점에만 생성/소비되므로
+  /// hatched 알도 이관해야 서버가 voucher를 소진하고 부화한 몬스터도 넘길 수 있음
   /// (Document/study_folder/6-4_게스트 회원가입 마이그레이션.md).
-  Future<List<UserEgg>> getAllEggs() async {
+  Future<List<UserEgg>> getUnsyncedEggs() async {
     final db = await AppDatabase.instance.database;
-    final rows = await db.query('user_eggs', orderBy: 'acquired_at ASC');
+    final rows = await db.query(
+      'user_eggs',
+      where: 'synced_at IS NULL',
+      orderBy: 'acquired_at ASC',
+    );
     return rows.map(UserEgg.fromMap).toList();
   }
 
-  /// 보관함 조회 — 아직 부화 안 한 모든 알(파트너 아닌 것 포함), 획득순.
+  /// 단건 재조회 — 부화 직전 재이관을 시도한 뒤 그 알의 synced_at이 실제로 채워졌는지(또는
+  /// 만료로 삭제됐는지) 다시 확인하는 데 씀(egg_inventory_screen.dart `_determineSpecies`).
+  Future<UserEgg?> getById(String id) async {
+    final db = await AppDatabase.instance.database;
+    final rows = await db.query(
+      'user_eggs',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return UserEgg.fromMap(rows.first);
+  }
+
+  /// 마이그레이션용 — 미동기화 몬스터가 참조하는 알을 synced 여부와 무관하게 같이 실어보내기
+  /// 위한 조회(migration_service.dart 주석 참고). 서버 migrate 루프는 verifiedEggRarity를 그
+  /// 요청에 실린 알에서만 채우므로, 알이 먼저 이관돼 목록에서 빠지면 그 알의 몬스터가 영구 거부됨.
+  Future<List<UserEgg>> getByIds(Iterable<String> ids) async {
+    final idList = ids.toList();
+    if (idList.isEmpty) return [];
+    final db = await AppDatabase.instance.database;
+    final result = <UserEgg>[];
+    for (var i = 0; i < idList.length; i += 500) {
+      final chunk = idList.sublist(
+        i,
+        i + 500 > idList.length ? idList.length : i + 500,
+      );
+      final placeholders = List.filled(chunk.length, '?').join(', ');
+      final rows = await db.query(
+        'user_eggs',
+        where: 'id IN ($placeholders)',
+        whereArgs: chunk,
+      );
+      result.addAll(rows.map(UserEgg.fromMap));
+    }
+    return result;
+  }
+
+  /// 서버 반영이 확인된(migrated/already_done, 또는 복구로 받아온) 알들을 이관 완료로 표시.
+  /// [executor]를 주면 부화 트랜잭션 안에서 같이 커밋(로그인 상태 부화 시 사용). id 개수가
+  /// SQLite 변수 한도(구버전 999)를 넘을 수 있어 청크로 나눠 실행.
+  Future<void> markSynced(
+    Iterable<String> ids, {
+    DatabaseExecutor? executor,
+  }) async {
+    final idList = ids.toList();
+    if (idList.isEmpty) return;
+    final db = executor ?? await AppDatabase.instance.database;
+    final now = DateTime.now().toIso8601String();
+    for (var i = 0; i < idList.length; i += 500) {
+      final chunk = idList.sublist(
+        i,
+        i + 500 > idList.length ? idList.length : i + 500,
+      );
+      final placeholders = List.filled(chunk.length, '?').join(', ');
+      await db.rawUpdate(
+        'UPDATE user_eggs SET synced_at = ? WHERE id IN ($placeholders)',
+        [now, ...chunk],
+      );
+    }
+  }
+
+  /// 보관함 조회 — 아직 부화 안 한 모든 알(파트너 아닌 것 포함). 파트너로 지정된 알을 최상단으로
+  /// 올리고(is_partner DESC), 그 안에서는 획득순(acquired_at ASC). partner_egg_progress_box는
+  /// 어차피 파트너 알만 골라 쓰므로 이 정렬 변경의 영향을 안 받음.
   Future<List<UserEgg>> getUnhatchedEggs() async {
     final db = await AppDatabase.instance.database;
     final rows = await db.query(
       'user_eggs',
       where: 'hatched_at IS NULL',
-      orderBy: 'acquired_at ASC',
+      orderBy: 'is_partner DESC, acquired_at ASC',
     );
     return rows.map(UserEgg.fromMap).toList();
   }
@@ -155,7 +285,7 @@ class EggRepository {
     return true;
   }
 
-  /// 걸음수 델타를 활성 파트너 알 전체에 각각 그대로 적립(4-3 섹션: "나눠 갖지 않음").
+  /// 거리 델타를 활성 파트너 알 전체에 각각 그대로 적립(4-3 섹션: "나눠 갖지 않음").
   /// 갱신 후 상태를 반환 — 방금 부화 목표에 도달한 알을 호출부에서 감지하는 데 사용.
   Future<List<UserEgg>> _getPartnerEggs(Database db) async {
     final rows = await db.query(
@@ -165,16 +295,16 @@ class EggRepository {
     return rows.map(UserEgg.fromMap).toList();
   }
 
-  Future<List<UserEgg>> addStepsToPartners(int deltaSteps) async {
+  Future<List<UserEgg>> addDistanceToPartners(int deltaMeters) async {
     final db = await AppDatabase.instance.database;
-    if (deltaSteps <= 0) return _getPartnerEggs(db);
+    if (deltaMeters <= 0) return _getPartnerEggs(db);
     await db.rawUpdate(
       '''
       UPDATE user_eggs
-      SET steps_accumulated = steps_accumulated + ?
+      SET distance_accumulated_meters = distance_accumulated_meters + ?
       WHERE is_partner = 1 AND hatched_at IS NULL
       ''',
-      [deltaSteps],
+      [deltaMeters],
     );
     return _getPartnerEggs(db);
   }
@@ -182,7 +312,11 @@ class EggRepository {
   /// [executor]를 주면 그 트랜잭션 안에서 실행 — 부화 시 monster_repository.insertHatchedMonster와
   /// 하나의 트랜잭션으로 묶어서 원자적으로 처리하는 데 사용(EggInventoryScreen._onHatchPressed 참고).
   /// 안 주면 기본 DB에 바로 씀(기존 호출부 호환).
-  Future<void> markHatched(String eggId, DateTime hatchedAt, {DatabaseExecutor? executor}) async {
+  Future<void> markHatched(
+    String eggId,
+    DateTime hatchedAt, {
+    DatabaseExecutor? executor,
+  }) async {
     final db = executor ?? await AppDatabase.instance.database;
     await db.update(
       'user_eggs',
@@ -190,5 +324,13 @@ class EggRepository {
       where: 'id = ?',
       whereArgs: [eggId],
     );
+  }
+
+  /// 유통기한이 지나 "굳어버린" 게스트 알을 보관함에서 제거(init_plan.md "클라이언트 측 선제 체크").
+  /// 서버 강제력은 여전히 egg_vouchers 삭제에 있고, 이건 실패 시점을 회원가입이 아니라 부화 시점의
+  /// 게임 내 이벤트로 앞당기는 UX 장치라 로컬 row만 지우면 됨.
+  Future<void> deleteEgg(String eggId) async {
+    final db = await AppDatabase.instance.database;
+    await db.delete('user_eggs', where: 'id = ?', whereArgs: [eggId]);
   }
 }

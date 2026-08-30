@@ -45,10 +45,12 @@ class _HatchRevealScreenState extends State<HatchRevealScreen>
     final color = rarityColor(widget.species.rarity);
     return Scaffold(
       backgroundColor: Colors.black,
-      body: Center(
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 500),
-          child: _revealed ? _buildReveal(color) : _buildShake(),
+      body: SafeArea(
+        child: Center(
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 500),
+            child: _revealed ? _buildReveal(color) : _buildShake(),
+          ),
         ),
       ),
     );
@@ -70,44 +72,65 @@ class _HatchRevealScreenState extends State<HatchRevealScreen>
   }
 
   Widget _buildReveal(Color color) {
-    return Column(
+    // 설명(monster_species.description)이 길면(문단 여러 개짜리 종도 있음) Column이 화면
+    // 높이를 넘겨 RenderFlex 오버플로가 났었음 — 스크롤 뷰로 감싸서 길면 스크롤, 짧으면
+    // Center가 그대로 세로 가운데 정렬(SingleChildScrollView는 내용이 뷰포트보다 작으면 내용
+    // 높이만 차지함).
+    return SingleChildScrollView(
       key: const ValueKey('reveal'),
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 220,
-          height: 220,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(color: color.withValues(alpha: 0.8), blurRadius: 60, spreadRadius: 20),
-            ],
-          ),
-          child: ClipOval(
-            child: CachedNetworkImage(
-              imageUrl: widget.species.imageUrl,
-              fit: BoxFit.cover,
-              errorWidget: (context, url, error) => Icon(Icons.pets, size: 100, color: color),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 240,
+            height: 240,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // 등급별 발광 효과는 몬스터 뒤에 깔리는 원형 후광으로만 쓰고, 몬스터 이미지 자체는
+                // 잘라내지 않음 — 원래는 ClipOval로 이미지를 원 안에 가뒀는데, 정사각형 아트의
+                // 모서리(팔다리/꼬리 등)가 잘려 보이는 문제가 있었음.
+                Container(
+                  width: 180,
+                  height: 180,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(color: color.withValues(alpha: 0.8), blurRadius: 60, spreadRadius: 20),
+                    ],
+                  ),
+                ),
+                // 부화 연출은 움직이는 아트(animationUrl)를 우선 사용(2026-08-26 사용자 결정,
+                // Document/temp.md 참고) — 없으면(구버전 종 등) 정적 imageUrl로 폴백.
+                CachedNetworkImage(
+                  imageUrl: widget.species.animationUrl ?? widget.species.imageUrl,
+                  width: 240,
+                  height: 240,
+                  fit: BoxFit.contain,
+                  errorWidget: (context, url, error) => Icon(Icons.pets, size: 100, color: color),
+                ),
+              ],
             ),
           ),
-        ),
-        const SizedBox(height: 24),
-        Text(
-          widget.species.name,
-          style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          widget.species.description ?? '',
-          textAlign: TextAlign.center,
-          style: const TextStyle(color: Colors.white70),
-        ),
-        const SizedBox(height: 32),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(AppLocalizations.of(context)!.confirmButton),
-        ),
-      ],
+          const SizedBox(height: 24),
+          Text(
+            widget.species.name,
+            style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            widget.species.description ?? '',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white70),
+          ),
+          const SizedBox(height: 32),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(AppLocalizations.of(context)!.confirmButton),
+          ),
+        ],
+      ),
     );
   }
 }

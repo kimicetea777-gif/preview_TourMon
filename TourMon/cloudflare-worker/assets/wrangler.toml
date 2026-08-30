@@ -1,0 +1,23 @@
+name = "tourmon-asset-cdn"
+main = "src/index.ts"
+compatibility_date = "2026-08-01"
+minify = false
+
+routes = [
+  { pattern = "assets.kimicetea.app", custom_domain = true }
+]
+
+# R2 bucket 바인딩 — tourmon-pmtiles 워커(../cloudflare)와 같은 tourmon-assets 버킷을 공유.
+# 이 워커는 "monsters/"·"config/" 접두사가 붙은 객체만 서빙(src/index.ts의 ALLOWED_PREFIXES) —
+# 버킷의 다른 객체(maps/ 등)가 이 공개 엔드포인트로 노출되지 않게 화이트리스트 방식으로 제한.
+[[r2_buckets]]
+binding = "BUCKET"
+preview_bucket_name = "tourmon-assets"
+bucket_name = "tourmon-assets"
+
+[vars]
+ALLOWED_ORIGINS = "*"
+# monsters/* (몬스터 아트) — 거의 안 바뀌므로 길게. 갱신 시엔 CDN purge 필요.
+CACHE_CONTROL = "public, max-age=86400"
+# config/* (app-notice.json) — 공지 즉시성 때문에 짧게. purge 없이 이 시간 안에 전파됨.
+CONFIG_CACHE_CONTROL = "public, max-age=60, must-revalidate"

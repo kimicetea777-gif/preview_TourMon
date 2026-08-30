@@ -43,6 +43,9 @@ export async function GET(
   return Response.json({
     overview: common?.overview ?? null,
     homepage: common?.homepage ?? null,
+    // en 요청이었는데 매칭된 영문 content가 없어 국문으로 폴백한 경우를 클라이언트가 구분할 수
+    // 있게 알려줌 — 안 그러면 영어 화면에 한국어 설명이 아무 표시 없이 섞여 나옴(실기기 확인).
+    usedEnglish: wantsEnglish,
     images: images.items.map((img) => ({
       originImgUrl: img.originimgurl,
       smallImageUrl: img.smallimageurl ?? img.originimgurl,

@@ -1,1 +1,0 @@
-ALTER TABLE "user_monsters" ADD CONSTRAINT "user_monsters_egg_id_unique" UNIQUE("egg_id");

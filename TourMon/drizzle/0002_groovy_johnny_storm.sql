@@ -1,1 +1,0 @@
-ALTER TYPE "public"."rarity_tier" ADD VALUE 'epic' BEFORE 'legendary';

@@ -33,8 +33,9 @@
   "@partnerLimitError": {
     "placeholders": { "max": { "type": "int" } }
   },
-  "hatchNotReadyMessage": "서버에 걸음수 동기화가 아직 반영되지 않았습니다. 잠시 후 다시 시도해 주세요.",
+  "hatchNotReadyMessage": "서버에 거리 동기화가 아직 반영되지 않았습니다. 잠시 후 다시 시도해 주세요.",
   "hatchAlreadyDoneMessage": "이미 부화한 알입니다.",
+  "hatchEggNotOnAccountMessage": "이 알을 계정으로 옮기는 중입니다. 잠시 후 다시 시도해 주세요.",
   "hatchFailedMessage": "부화에 실패했습니다: {error}",
   "@hatchFailedMessage": {
     "placeholders": { "error": { "type": "String" } }
@@ -42,21 +43,43 @@
   "eggInventoryTitle": "알 보관함",
   "noEggsMessage": "보관 중인 알이 없습니다. 관광지에서 알을 획득해 보세요!",
   "hatchButton": "부화하기",
-  "stepsProgress": "{rarity} · {current}/{target}",
-  "@stepsProgress": {
+  "distanceProgress": "{rarity} · {current}km/{target}km",
+  "@distanceProgress": {
     "placeholders": {
       "rarity": { "type": "String" },
-      "current": { "type": "int" },
-      "target": { "type": "int" }
+      "current": { "type": "String" },
+      "target": { "type": "String" }
     }
   },
 
   "eggInfoButtonTooltip": "알 정보",
-  "eggInfoTargetStepsLabel": "목표 걸음 수",
+  "partnerToggleLabel": "파트너",
+  "partnerToggleTooltip": "체크하면 이 알에 걷기 거리가 쌓입니다",
+  "eggInfoTargetDistanceLabel": "목표 거리",
   "eggInfoHatchOddsTitle": "부화 시 몬스터 등급 확률",
   "eggInfoLoadFailedMessage": "정보를 불러오지 못했습니다: {error}",
   "@eggInfoLoadFailedMessage": {
     "placeholders": { "error": { "type": "String" } }
+  },
+  "eggOddsOverviewButtonTooltip": "알 등급별 확률",
+  "eggOddsOverviewTitle": "알 등급별 몬스터 확률",
+
+  "guestEggShelfLifeBanner": "로그인하지 않은 알은 획득 후 {days}일이 지나면 굳어서 부화할 수 없게 돼요. 로그인하면 계정에 영구 보관됩니다.",
+  "@guestEggShelfLifeBanner": {
+    "placeholders": { "days": { "type": "int" } }
+  },
+  "guestEggExpiresInDays": "{days, plural, =1{하루 뒤 굳어요} other{{days}일 뒤 굳어요}}",
+  "@guestEggExpiresInDays": {
+    "placeholders": { "days": { "type": "int" } }
+  },
+  "guestEggExpiresTodayLabel": "오늘 지나면 굳어요",
+  "guestEggExpiredLabel": "굳어서 부화할 수 없어요",
+  "guestEggExpiredHatchAttemptMessage": "알이 이미 굳어버린 것 같습니다. 보관함에서 치웠어요.",
+  "discardExpiredEggButton": "치우기",
+  "guestEggDiscardedMessage": "굳은 알을 치웠어요.",
+  "eggInfoGuestShelfLifeNote": "로그인 전이라 획득 후 {days}일까지만 부화할 수 있어요.",
+  "@eggInfoGuestShelfLifeNote": {
+    "placeholders": { "days": { "type": "int" } }
   },
 
   "confirmButton": "확인",
@@ -78,12 +101,14 @@
     }
   },
   "acquireEggButton": "알 획득하기",
+  "acquireEggDisabledButton": "알 획득 불가",
   "eggAcquisitionDisabledMessage": "숙박, 음식점, 쇼핑은 알을 획득할 수 없습니다.",
   "showMoreButton": "더보기",
   "detailLoadFailedMessage": "상세정보를 불러오지 못함: {error}",
   "@detailLoadFailedMessage": {
     "placeholders": { "error": { "type": "String" } }
   },
+  "noEnglishTranslationLabel": "영어 설명: 영어 번역이 없어요",
 
   "dexCountLabel": "{caught} / {total}",
   "@dexCountLabel": {
@@ -148,6 +173,9 @@
   "mapFollowPausedSpeedMessage": "속도가 빨라 위치 추적을 잠시 멈췄어요",
   "locationServiceDisabledMessage": "위치 서비스를 켜 주세요.",
   "locationPermissionDeniedMessage": "이 기능을 사용하려면 위치 권한이 필요합니다.",
+  "locationPermissionDeniedForeverMessage": "위치 권한이 영구적으로 거부돼 있어요. 기기 설정 > 앱 > 권한에서 위치를 허용해 주세요.",
+  "outOfServiceAreaMessage": "서울·인천 서비스 지역 밖이에요. 이 지역에서는 지도가 정상적으로 표시되지 않아요.",
+  "locationTrackingStoppedMessage": "위치 접근이 중단돼 위치 추적을 멈췄어요.",
 
   "tourismDataSyncingMessage": "관광지 데이터를 받는 중...",
   "tourismDataSyncFailedMessage": "관광지 데이터를 받아오지 못했습니다.",
@@ -161,15 +189,17 @@
   "languageKoreanOption": "한국어",
   "languageEnglishOption": "English",
 
+  "appNotWorkingLabel": "앱이 안돼요",
+
   "tourismResyncTitle": "관광지 데이터 다시 동기화",
   "tourismResyncSubtitle": "지도에 관광지가 제대로 안 보이면 눌러보세요",
   "tourismResyncSuccessMessage": "관광지 데이터를 새로 받았습니다. 앱을 껐다 다시 켜주세요.",
 
-  "partnerEggStepsLabel": "{current}/{target}",
-  "@partnerEggStepsLabel": {
+  "partnerEggDistanceLabel": "{current}km/{target}km",
+  "@partnerEggDistanceLabel": {
     "placeholders": {
-      "current": { "type": "int" },
-      "target": { "type": "int" }
+      "current": { "type": "String" },
+      "target": { "type": "String" }
     }
   },
   "emptyPartnerSlotLabel": "빈 슬롯",
@@ -179,16 +209,74 @@
       "kcal": { "type": "int" }
     }
   },
+  "syncDistanceNowTooltip": "지금 거리 동기화",
+  "distanceRefreshInfoTooltip": "거리 갱신 주기 안내",
+  "distanceRefreshInfoTitle": "거리 갱신 주기",
+  "distanceRefreshInfoBody": "걸음 거리는 배터리 소모를 줄이기 위해 약 {minutes}분 간격으로만 갱신돼요. 지금 바로 반영하려면 새로고침 버튼(⟳)을 누르거나 목록을 아래로 당겨 주세요.",
+  "@distanceRefreshInfoBody": {
+    "placeholders": { "minutes": { "type": "int" } }
+  },
+  "distanceRefreshEveryMinutes": "배터리 절약을 위해 약 {minutes}분마다 갱신돼요",
+  "@distanceRefreshEveryMinutes": {
+    "placeholders": { "minutes": { "type": "int" } }
+  },
+  "distanceRefreshedJustNow": "방금 갱신됨",
+  "distanceRefreshedMinutesAgo": "{minutes}분 전 갱신",
+  "@distanceRefreshedMinutesAgo": {
+    "placeholders": { "minutes": { "type": "int" } }
+  },
+  "distanceRefreshedHoursAgo": "{hours}시간 전 갱신",
+  "@distanceRefreshedHoursAgo": {
+    "placeholders": { "hours": { "type": "int" } }
+  },
+  "distanceRefreshNeverSynced": "아직 갱신 안 됨",
+
+  "onboardingSkipButton": "건너뛰기",
+  "onboardingNextButton": "다음",
+  "onboardingStartButton": "시작하기",
+  "onboardingCloseButton": "닫기",
+  "onboardingSpotTitle": "관광지에서 알 획득",
+  "onboardingSpotBody": "지도의 관광지 마커에 가까이 가면 알을 하나 얻어요. 같은 곳은 하루에 한 번.",
+  "onboardingPartnerTitle": "파트너 알 등록",
+  "onboardingPartnerBody": "알 보관함에서 함께 걸을 파트너 알을 최대 2개까지 골라요.",
+  "onboardingWalkTitle": "걸어서 거리 쌓기",
+  "onboardingWalkBody": "걸은 거리만큼 파트너 알이 자라요. 거리는 배터리 절약을 위해 몇 분마다 갱신돼요.",
+  "onboardingHatchTitle": "부화!",
+  "onboardingHatchBody": "목표 거리를 채우면 알이 부화하고, 몬스터가 도감에 등록돼요.",
+  "howToPlayTitle": "앱 사용법 다시 보기",
+
+  "updateRequiredTitle": "업데이트가 필요해요",
+  "updateRequiredBody": "이 버전은 더 이상 지원되지 않아요. 계속하려면 최신 버전으로 업데이트해 주세요.",
+  "updateRequiredButton": "업데이트",
+  "noticeDismissTooltip": "공지 닫기",
+
   "expandPartnerEggBoxTooltip": "파트너 알 진행도 펼치기",
   "collapsePartnerEggBoxTooltip": "파트너 알 진행도 접기",
   "expandQuickActionsBoxTooltip": "메뉴 펼치기",
   "collapseQuickActionsBoxTooltip": "메뉴 접기",
 
   "unlinkSectionTitle": "연동 해제",
-  "unlinkExplanationMessage": "TourMon과의 연결을 끊으려면 계정 관리 페이지로 이동해 '연동 서비스 관리'에서 TourMon을 찾아 '연결 해제'를 눌러주세요. 연결을 해제하면 로그인이 즉시 차단됩니다.",
+  "unlinkExplanationMessage": "TourMon과의 연결을 끊으려면 계정 관리 페이지로 이동해 '연동 서비스 관리'에서 TourMon을 찾아 '연결 해제'를 눌러주세요. 연결을 해제하면 로그인은 즉시 차단되고, 보유하신 개인정보는 32일 후 파기됩니다.",
   "unlinkButtonLabel": "계정 관리로 이동",
   "unlinkLaunchFailedMessage": "페이지를 열지 못했습니다: {error}",
   "@unlinkLaunchFailedMessage": {
     "placeholders": { "error": { "type": "String" } }
-  }
+  },
+
+  "legalLinksSectionTitle": "약관 및 정책",
+  "viewTermsOfServiceLabel": "이용약관 보기",
+  "viewPrivacyPolicyLabel": "개인정보처리방침 보기",
+  "viewCreditsLabel": "데이터 출처 및 라이선스 보기",
+
+  "tourApiAttribution": "관광정보·사진 출처: ⓒ한국관광공사 (TourAPI)",
+
+  "healthConnectConnectPrompt": "걸은 거리가 안 잡혀요 — Health Connect 연결하기",
+  "healthConnectNoticeDialogTitle": "Health Connect 연동 안내",
+  "healthConnectNoticeBodyMessage": "파트너 알은 실제로 걸은 거리만큼 자라나요. 이 거리는 특정 제조사 앱이 아니라, 안드로이드가 제공하는 공용 건강 데이터 저장소 'Health Connect'에서 가져와요(구글 핏·삼성 헬스 등 다른 건강 앱이 기록한 데이터도 여기 함께 모여요). 계속하면 Health Connect가 없는 경우 설치 화면으로, 있는 경우 권한 요청 화면으로 넘어가요.",
+  "healthConnectDeniedPartnerCancelledMessage": "Health Connect 권한이 없어 파트너 지정을 취소했어요. 파트너 알은 걸은 거리로 자라기 때문에 권한이 필요해요.",
+
+  "locationConsentDialogTitle": "위치정보 및 이용 연령 확인",
+  "locationConsentBodyMessage": "알 획득 시 관광지 반경 확인을 위해 위치정보를 실시간으로만 사용하며 저장하지 않습니다. 위치 권한은 기기 설정에서 언제든 꺼서 동의를 철회할 수 있으며, 이 경우 알 획득 등 위치 기반 기능을 이용할 수 없습니다. 자세한 내용은 마이페이지의 개인정보처리방침을 참고하세요.",
+  "locationConsentAgreeCheckboxLabel": "위치정보 수집·이용에 동의합니다",
+  "ageConsentCheckboxLabel": "만 14세 이상입니다"
 }

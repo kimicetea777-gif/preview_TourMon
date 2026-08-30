@@ -1,5 +1,5 @@
 {
-  "id": "de11a881-5c8b-43fb-ab2d-5461f5e2e140",
+  "id": "2dbf457e-53a0-4aad-9ed5-7ade846bfeb9",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -25,6 +25,13 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": false
+        },
+        "egg_acquisition_enabled": {
+          "name": "egg_acquisition_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
         }
       },
       "indexes": {},
@@ -111,8 +118,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "target_steps": {
-          "name": "target_steps",
+        "target_distance_meters": {
+          "name": "target_distance_meters",
           "type": "integer",
           "primaryKey": false,
           "notNull": true
@@ -138,15 +145,213 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
-        "egg_types_target_steps_positive": {
-          "name": "egg_types_target_steps_positive",
-          "value": "\"egg_types\".\"target_steps\" > 0"
+        "egg_types_target_distance_positive": {
+          "name": "egg_types_target_distance_positive",
+          "value": "\"egg_types\".\"target_distance_meters\" > 0"
         },
         "egg_types_weight_non_negative": {
           "name": "egg_types_weight_non_negative",
           "value": "\"egg_types\".\"weight\" >= 0"
         }
       },
+      "isRLSEnabled": false
+    },
+    "public.egg_vouchers": {
+      "name": "egg_vouchers",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "egg_type_id": {
+          "name": "egg_type_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rarity": {
+          "name": "rarity",
+          "type": "rarity_tier",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "target_distance_meters": {
+          "name": "target_distance_meters",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "issued_at": {
+          "name": "issued_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "egg_vouchers_issued_at_idx": {
+          "name": "egg_vouchers_issued_at_idx",
+          "columns": [
+            {
+              "expression": "issued_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "egg_vouchers_egg_type_id_egg_types_id_fk": {
+          "name": "egg_vouchers_egg_type_id_egg_types_id_fk",
+          "tableFrom": "egg_vouchers",
+          "tableTo": "egg_types",
+          "columnsFrom": [
+            "egg_type_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.eng_match_reviews": {
+      "name": "eng_match_reviews",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "content_id_en": {
+          "name": "content_id_en",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title_en": {
+          "name": "title_en",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "addr1_en": {
+          "name": "addr1_en",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "addr2_en": {
+          "name": "addr2_en",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location_geog": {
+          "name": "location_geog",
+          "type": "geography(Point,4326)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content_type_id": {
+          "name": "content_type_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "candidate_tourism_spot_ids": {
+          "name": "candidate_tourism_spot_ids",
+          "type": "integer[]",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "eng_match_review_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "resolved_tourism_spot_id": {
+          "name": "resolved_tourism_spot_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "resolved_at": {
+          "name": "resolved_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "eng_match_reviews_content_type_id_content_types_id_fk": {
+          "name": "eng_match_reviews_content_type_id_content_types_id_fk",
+          "tableFrom": "eng_match_reviews",
+          "tableTo": "content_types",
+          "columnsFrom": [
+            "content_type_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "eng_match_reviews_resolved_tourism_spot_id_tourism_spots_id_fk": {
+          "name": "eng_match_reviews_resolved_tourism_spot_id_tourism_spots_id_fk",
+          "tableFrom": "eng_match_reviews",
+          "tableTo": "tourism_spots",
+          "columnsFrom": [
+            "resolved_tourism_spot_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "eng_match_reviews_content_id_en_unique": {
+          "name": "eng_match_reviews_content_id_en_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "content_id_en"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.monster_attribute_weights": {
@@ -400,6 +605,44 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.polling_cursors": {
+      "name": "polling_cursors",
+      "schema": "",
+      "columns": {
+        "poller_name": {
+          "name": "poller_name",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "since_timestamp": {
+          "name": "since_timestamp",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "since_id": {
+          "name": "since_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.rarity_weight_multipliers": {
       "name": "rarity_weight_multipliers",
       "schema": "",
@@ -479,63 +722,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.step_sync_logs": {
-      "name": "step_sync_logs",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "delta_steps": {
-          "name": "delta_steps",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "synced_at": {
-          "name": "synced_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "step_sync_logs_user_id_users_id_fk": {
-          "name": "step_sync_logs_user_id_users_id_fk",
-          "tableFrom": "step_sync_logs",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "step_sync_logs_delta_steps_non_negative": {
-          "name": "step_sync_logs_delta_steps_non_negative",
-          "value": "\"step_sync_logs\".\"delta_steps\" >= 0"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.tourism_spots": {
       "name": "tourism_spots",
       "schema": "",
@@ -594,6 +780,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "content_id_en": {
+          "name": "content_id_en",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "location_geog": {
           "name": "location_geog",
           "type": "geography(Point,4326)",
@@ -618,11 +810,44 @@
           "primaryKey": false,
           "notNull": false
         },
+        "is_active": {
+          "name": "is_active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
         "region_code": {
           "name": "region_code",
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "representative_spot_id": {
+          "name": "representative_spot_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "representative_priority": {
+          "name": "representative_priority",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_representative": {
+          "name": "is_representative",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "member_count": {
+          "name": "member_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
         },
         "created_at": {
           "name": "created_at",
@@ -653,6 +878,36 @@
           "concurrently": false,
           "method": "gist",
           "with": {}
+        },
+        "tourism_spots_representative_spot_id_idx": {
+          "name": "tourism_spots_representative_spot_id_idx",
+          "columns": [
+            {
+              "expression": "representative_spot_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "tourism_spots_is_representative_idx": {
+          "name": "tourism_spots_is_representative_idx",
+          "columns": [
+            {
+              "expression": "is_representative",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -680,6 +935,19 @@
             "code"
           ],
           "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "tourism_spots_representative_spot_id_tourism_spots_id_fk": {
+          "name": "tourism_spots_representative_spot_id_tourism_spots_id_fk",
+          "tableFrom": "tourism_spots",
+          "tableTo": "tourism_spots",
+          "columnsFrom": [
+            "representative_spot_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
@@ -725,25 +993,18 @@
           "primaryKey": false,
           "notNull": false
         },
-        "target_steps": {
-          "name": "target_steps",
+        "target_distance_meters": {
+          "name": "target_distance_meters",
           "type": "integer",
           "primaryKey": false,
           "notNull": true
         },
-        "steps_accumulated": {
-          "name": "steps_accumulated",
+        "distance_accumulated_meters": {
+          "name": "distance_accumulated_meters",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "default": 0
-        },
-        "is_partner": {
-          "name": "is_partner",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
         },
         "acquired_at": {
           "name": "acquired_at",
@@ -833,13 +1094,13 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
-        "user_eggs_target_steps_positive": {
-          "name": "user_eggs_target_steps_positive",
-          "value": "\"user_eggs\".\"target_steps\" > 0"
+        "user_eggs_target_distance_positive": {
+          "name": "user_eggs_target_distance_positive",
+          "value": "\"user_eggs\".\"target_distance_meters\" > 0"
         },
-        "user_eggs_steps_accumulated_non_negative": {
-          "name": "user_eggs_steps_accumulated_non_negative",
-          "value": "\"user_eggs\".\"steps_accumulated\" >= 0"
+        "user_eggs_distance_accumulated_non_negative": {
+          "name": "user_eggs_distance_accumulated_non_negative",
+          "value": "\"user_eggs\".\"distance_accumulated_meters\" >= 0"
         }
       },
       "isRLSEnabled": false
@@ -942,7 +1203,15 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "user_monsters_egg_id_unique": {
+          "name": "user_monsters_egg_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "egg_id"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -975,6 +1244,25 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
+        },
+        "membership_withdrawn_at": {
+          "name": "membership_withdrawn_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "anonymized_at": {
+          "name": "anonymized_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_distance_sync_at": {
+          "name": "last_distance_sync_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
         }
       },
       "indexes": {},
@@ -987,6 +1275,15 @@
     }
   },
   "enums": {
+    "public.eng_match_review_status": {
+      "name": "eng_match_review_status",
+      "schema": "public",
+      "values": [
+        "pending",
+        "resolved",
+        "rejected"
+      ]
+    },
     "public.monster_attribute": {
       "name": "monster_attribute",
       "schema": "public",
@@ -1004,6 +1301,7 @@
       "values": [
         "common",
         "rare",
+        "epic",
         "legendary"
       ]
     }

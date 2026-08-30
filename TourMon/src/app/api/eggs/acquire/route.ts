@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
     id,
     eggTypeId: chosen.id,
     rarity: chosen.rarity,
-    targetSteps: chosen.targetSteps,
+    targetDistanceMeters: chosen.targetDistanceMeters,
   });
 
   // 로그인 상태면 실제 인벤토리 row도 바로 생성 — voucher와는 별개(voucher는 마이그레이션 없이도
@@ -151,7 +151,7 @@ export async function POST(request: NextRequest) {
         userId: auth.sub,
         eggTypeId: chosen.id,
         tourismSpotId: cooldownSpotId,
-        targetSteps: chosen.targetSteps,
+        targetDistanceMeters: chosen.targetDistanceMeters,
       });
       return true;
     });
@@ -167,7 +167,7 @@ export async function POST(request: NextRequest) {
     id,
     eggTypeId: chosen.id,
     rarity: chosen.rarity,
-    targetSteps: chosen.targetSteps,
+    targetDistanceMeters: chosen.targetDistanceMeters,
     name: translation?.name ?? chosen.rarity,
     description: translation?.description ?? null,
   });

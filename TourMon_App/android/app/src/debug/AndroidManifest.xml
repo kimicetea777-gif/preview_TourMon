@@ -5,6 +5,13 @@
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
+    <!-- 4단계 부화 — 에뮬레이터에서 실제로 안 걸어도 Health Connect 연동을 검증할 수 있도록,
+         디버그 빌드에서만 DebugDistanceInjectorButton이 recordingMethod=automatic으로 테스트
+         걸음수를 직접 써넣을 수 있게 함(release 매니페스트에는 없음 — 이 앱은 원래 READ_STEPS만
+         쓰는 조회 전용 설계, Document/temp.md 참고). WRITE_DISTANCE 대신 WRITE_STEPS —
+         DistanceTrackerService가 STEPS를 조회하는 쪽으로 전환됨(2026-08-26). -->
+    <uses-permission android:name="android.permission.health.WRITE_STEPS"/>
+
     <!-- 1단계 배경 지도: 로컬 pmtiles-server가 평문 HTTP라 디버그 빌드에서만 cleartext 허용
          (release에는 병합되지 않음, 프로덕션은 cloudflared HTTPS) -->
     <application android:networkSecurityConfig="@xml/network_security_config" />

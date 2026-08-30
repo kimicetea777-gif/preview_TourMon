@@ -8,7 +8,7 @@ class AppDatabase {
   AppDatabase._();
   static final AppDatabase instance = AppDatabase._();
 
-  static const _dbVersion = 5;
+  static const _dbVersion = 7;
 
   Database? _db;
 
@@ -33,8 +33,8 @@ class AppDatabase {
             rarity TEXT NOT NULL,
             name TEXT NOT NULL,
             description TEXT,
-            target_steps INTEGER NOT NULL,
-            steps_accumulated INTEGER NOT NULL DEFAULT 0,
+            target_distance_meters INTEGER NOT NULL,
+            distance_accumulated_meters INTEGER NOT NULL DEFAULT 0,
             is_partner INTEGER NOT NULL DEFAULT 0,
             acquired_at TEXT NOT NULL,
             hatched_at TEXT
@@ -43,8 +43,9 @@ class AppDatabase {
         await db.execute(_createUserMonstersSql);
         await db.execute(_createAppSettingsSql);
         await _addTourismSpotTitleColumns(db);
+        await _addSyncedAtColumns(db);
         await _createTourismSpotsCacheTable(db);
-        await _createDailyStepsTable(db);
+        await _createDailyDistanceTable(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -58,8 +59,33 @@ class AppDatabase {
         if (oldVersion < 4) {
           await _createTourismSpotsCacheTable(db);
         }
-        if (oldVersion < 5) {
-          await _createDailyStepsTable(db);
+        // v5 신설 테이블(daily_steps)은 v6에서 daily_distance로 바로 대체되므로 여기서 따로
+        // 만들지 않음(아래 oldVersion < 6 분기가 처리).
+        if (oldVersion < 6) {
+          // Health Connect 전환(Document/temp.md "통합 결정") — 걸음수 → 거리(meters). 실사용자
+          // 없음이 확인된 전제(temp.md 미결 사항)라 컬럼값 변환 없이 이름만 맞춰 새로 시작.
+          await db.execute(
+            'ALTER TABLE user_eggs RENAME COLUMN target_steps TO target_distance_meters',
+          );
+          await db.execute(
+            'ALTER TABLE user_eggs RENAME COLUMN steps_accumulated TO distance_accumulated_meters',
+          );
+          // daily_steps는 순수 표시용 캐시라 데이터 보존 없이 새 테이블로 교체(기존 "그냥 초기화"
+          // 결정과 같은 결, temp.md 미결 사항 참고).
+          await db.execute('DROP TABLE IF EXISTS daily_steps');
+          await _createDailyDistanceTable(db);
+        }
+        if (oldVersion < 7) {
+          // 게스트→회원 마이그레이션 재실행 조건을 전역 1회성 플래그(app_settings의
+          // `migration_completed_at`)에서 row 단위 추적으로 교체 — 자세한 배경은
+          // `_addSyncedAtColumns` 참고.
+          await _addSyncedAtColumns(db);
+          // 더 이상 안 읽는 죽은 키 — 남아 있으면 DB를 직접 들여다볼 때 혼란만 줌.
+          await db.delete(
+            'app_settings',
+            where: 'key = ?',
+            whereArgs: ['migration_completed_at'],
+          );
         }
       },
     );
@@ -72,6 +98,19 @@ class AppDatabase {
   Future<void> _addTourismSpotTitleColumns(Database db) async {
     await db.execute('ALTER TABLE user_eggs ADD COLUMN tourism_spot_title TEXT');
     await db.execute('ALTER TABLE user_monsters ADD COLUMN tourism_spot_title TEXT');
+  }
+
+  /// v7에서 추가 — 게스트→회원 마이그레이션이 이 row를 서버로 이관 완료했는지 추적. NULL이면
+  /// 아직 미이관(다음 로그인에 재시도), 값이 있으면 서버 반영이 확인된 시각(ISO8601). 예전엔
+  /// app_settings의 `migration_completed_at` 전역 플래그 하나로 "1회만 실행"을 판단했는데, 그
+  /// 플래그가 로그아웃 시 초기화되지 않아서 "로그인 → 로그아웃 → 게스트로 알 획득 → 재로그인"
+  /// 시 새 게스트 데이터가 영영 서버로 안 넘어가고 부화가 404로 실패하는 버그가 있었음
+  /// (Document/study_folder/6-4_게스트 회원가입 마이그레이션.md). `_addTourismSpotTitleColumns`와
+  /// 같은 이유로 CREATE 문에 넣지 않고 항상 ALTER로 추가 — v1에서 올라오는 기기가 oldVersion<2
+  /// 분기에서 user_monsters를 새로 만드는 경로와 컬럼이 중복되지 않게.
+  Future<void> _addSyncedAtColumns(Database db) async {
+    await db.execute('ALTER TABLE user_eggs ADD COLUMN synced_at TEXT');
+    await db.execute('ALTER TABLE user_monsters ADD COLUMN synced_at TEXT');
   }
 
   /// v4 — 관광지 로컬 캐싱(Document/temp.md "tour_spot 로컬 캐싱"). `user_eggs`/`user_monsters`와
@@ -107,16 +146,16 @@ class AppDatabase {
     );
   }
 
-  /// v5 — 걸음수 일별 히스토리(Document/plan/later.md "마이페이지 — 걸음수 통계"). 원래는 마이페이지
-  /// 통계용으로 미뤄뒀던 테이블인데, 지도 화면 파트너 알 박스의 "오늘 걸음수" 표시가 필요해져서
-  /// 이 시점에 앞당겨 만듦(Document/temp.md 참고) — 나중에 5일 요약/히스토리 그리드를 붙일 때
-  /// 스키마를 다시 안 건드리도록 later.md가 설계해둔 풀 테이블 그대로 생성. `date`는 KST 4시 경계
-  /// 기준 날짜 키(day_key.dart `resetDayKey`와 동일 형식, YYYY-MM-DD).
-  Future<void> _createDailyStepsTable(Database db) async {
+  /// v5(원래 daily_steps) → v6(Health Connect 전환, Document/temp.md "통합 결정")에서 daily_distance로
+  /// 교체 — 거리 일별 히스토리(Document/plan/later.md "마이페이지 — 걸음수 통계"). 지도 화면 파트너
+  /// 알 박스의 "오늘 거리" 표시용. `date`는 KST 4시 경계 기준 날짜 키(day_key.dart `resetDayKey`와
+  /// 동일 형식, YYYY-MM-DD). `distance_meters`는 Health Connect 구간을 `splitByResetDay`로 날짜별
+  /// 비례 배분한 값이라 REAL(소수 가능).
+  Future<void> _createDailyDistanceTable(Database db) async {
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS daily_steps (
+      CREATE TABLE IF NOT EXISTS daily_distance (
         date TEXT PRIMARY KEY,
-        steps INTEGER NOT NULL DEFAULT 0
+        distance_meters REAL NOT NULL DEFAULT 0
       )
     ''');
   }
@@ -137,7 +176,7 @@ class AppDatabase {
     )
   ''';
 
-  // 걸음수 기준선(last_raw_step_count) 등 단순 key-value 설정 저장용 — 4단계에서 처음 도입.
+  // 거리 동기화 기준 시각(distance_last_synced_at) 등 단순 key-value 설정 저장용 — 4단계에서 처음 도입.
   static const _createAppSettingsSql = '''
     CREATE TABLE IF NOT EXISTS app_settings (
       key TEXT PRIMARY KEY,

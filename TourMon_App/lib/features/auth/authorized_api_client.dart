@@ -11,7 +11,7 @@ import 'auth_session.dart';
 /// 늘어나면(eggs/acquire 등) 그대로 재사용할 수 있게 범용으로 만들어둠.
 class AuthorizedApiClient {
   // 7단계 — locale은 옵션(null이면 쿼리파라미터를 안 붙이고 서버 기본값(ko)에 맡김). 번역된
-  // 응답이 필요 없는 호출부(예: 걸음수 동기화)는 안 넘겨도 되고, 넘기면 이 클라이언트로 나가는
+  // 응답이 필요 없는 호출부(예: 거리 동기화)는 안 넘겨도 되고, 넘기면 이 클라이언트로 나가는
   // 모든 요청에 `?locale=`이 중앙으로 붙음(Document/temp.md Phase C — 호출부 개별 수정 불필요).
   AuthorizedApiClient(this._session, {this.locale});
 

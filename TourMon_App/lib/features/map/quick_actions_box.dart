@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../config/sketch/sketch_card.dart';
 import '../../l10n/app_localizations.dart';
 import '../auth/account_button.dart';
 import '../egg/egg_inventory_screen.dart';
@@ -24,12 +25,16 @@ class _QuickActionsBoxState extends State<QuickActionsBox> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    return Card(
-      margin: EdgeInsets.zero,
+    return SketchCard(
+      padding: EdgeInsets.zero,
+      rotationDegrees: 0.8,
+      seed: 3,
       child: AnimatedCrossFade(
         duration: const Duration(milliseconds: 200),
         alignment: Alignment.topRight,
-        crossFadeState: _expanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+        crossFadeState: _expanded
+            ? CrossFadeState.showSecond
+            : CrossFadeState.showFirst,
         firstChild: IconButton(
           icon: const Icon(Icons.menu),
           tooltip: l10n.expandQuickActionsBoxTooltip,
@@ -49,7 +54,9 @@ class _QuickActionsBoxState extends State<QuickActionsBox> {
               icon: const Icon(Icons.egg_outlined),
               tooltip: l10n.eggInventoryTitle,
               onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (context) => const EggInventoryScreen()),
+                MaterialPageRoute(
+                  builder: (context) => const EggInventoryScreen(),
+                ),
               ),
             ),
             IconButton(

@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   check,
   customType,
@@ -54,6 +55,20 @@ export const users = pgTable("users", {
     .notNull()
     .defaultNow(),
   lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+  // AS membership-events 폴링(CLIENT_WITHDRAWN)이 채움 — "연동 해제" 시각, 32일 유예 시작점.
+  // CLIENT_ACTIVATED(재연결)로 되돌아오면(users row가 아직 있는 한) 다시 null로 복원됨. 유예가
+  // 지나면 anonymize가 이 row를 하드 삭제한다(게임 기록은 익명 버킷 유저로 재지정,
+  // deletion-sync/anonymize.ts). 예전엔 여기 남는 row에 anonymized_at을 찍었으나, id(= AS sub)가
+  // 재식별 가능해서 하드 삭제 방식으로 바꾸며 그 컬럼은 제거됨(2026-08-30).
+  membershipWithdrawnAt: timestamp("membership_withdrawn_at", { withTimezone: true }),
+  // 거리 서버 동기화(POST /api/distance/sync)가 마지막으로 반영된 시각 — 다음 sync의 경과 시간
+  // (elapsed) 계산 기준. 서버 시계라 위조 불가. NOT NULL DEFAULT now()라 NULL 특수 처리가 없음
+  // (신규 유저는 행 생성 시각, 기존 유저는 마이그레이션 시각). mock 여부·클램프 여부와 무관하게
+  // 매 sync마다 now()로 전진시킴 — 안 그러면 버려진 구간이 다음 elapsed에 재포함돼 클램프가
+  // 무력화됨(Document/temp.md Part 2).
+  lastDistanceSyncAt: timestamp("last_distance_sync_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 });
 
 export const regions = pgTable("regions", {
@@ -158,11 +173,11 @@ export const engMatchReviews = pgTable("eng_match_reviews", {
 export const eggTypes = pgTable("egg_types", {
   id: serial("id").primaryKey(),
   rarity: rarityTierEnum("rarity").notNull(),
-  targetSteps: integer("target_steps").notNull(),
+  targetDistanceMeters: integer("target_distance_meters").notNull(),
   isActive: boolean("is_active").notNull().default(true),
   weight: numeric("weight").notNull().default("1"),
 }, (table) => [
-  check("egg_types_target_steps_positive", sql`${table.targetSteps} > 0`),
+  check("egg_types_target_distance_positive", sql`${table.targetDistanceMeters} > 0`),
   check("egg_types_weight_non_negative", sql`${table.weight} >= 0`),
 ]);
 
@@ -247,7 +262,7 @@ export const rarityWeightMultipliers = pgTable("rarity_weight_multipliers", {
 
 // 게스트 로컬 알 데이터 위조 방지용 "발급 확인증" — user_id 컬럼이 없는 무기명 증서 구조로, 로그인
 // 여부와 무관하게 /api/eggs/acquire가 egg_type을 배정할 때마다 생성된다. 마이그레이션/부화 시점에
-// 클라이언트가 들고 온 알의 id+rarity+targetSteps가 이 값과 정확히 일치해야 통과, 통과 시 삭제(1회성).
+// 클라이언트가 들고 온 알의 id+rarity+targetDistanceMeters가 이 값과 정확히 일치해야 통과, 통과 시 삭제(1회성).
 // (init_plan.md 397~407줄, Document/study_folder/6-4_게스트 회원가입 마이그레이션.md)
 export const eggVouchers = pgTable("egg_vouchers", {
   id: uuid("id").primaryKey(),
@@ -255,7 +270,7 @@ export const eggVouchers = pgTable("egg_vouchers", {
     .notNull()
     .references(() => eggTypes.id, { onDelete: "restrict" }),
   rarity: rarityTierEnum("rarity").notNull(), // 발급 시점 스냅샷
-  targetSteps: integer("target_steps").notNull(), // 발급 시점 스냅샷
+  targetDistanceMeters: integer("target_distance_meters").notNull(), // 발급 시점 스냅샷
   issuedAt: timestamp("issued_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -267,6 +282,9 @@ export const eggVouchers = pgTable("egg_vouchers", {
 
 export const userEggs = pgTable("user_eggs", {
   id: uuid("id").primaryKey(), // 클라이언트(게스트 로컬 or 서버) 생성 UUIDv7
+  // ⚠️ 탈퇴 익명화 후엔 이 값이 공용 익명 버킷 유저(`00000000-0000-0000-0000-000000000000`)일 수
+  // 있음 — 전역 통계용으로 남긴 개인 식별 불가 row(deletion-sync/anonymize.ts). 유저 대상 집계
+  // (리더보드 등)를 새로 만들면 이 id를 반드시 제외할 것.
   userId: uuid("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
@@ -277,9 +295,10 @@ export const userEggs = pgTable("user_eggs", {
     () => tourismSpots.id,
     { onDelete: "set null" },
   ),
-  targetSteps: integer("target_steps").notNull(), // 획득 시점 egg_types.target_steps 복사
-  stepsAccumulated: integer("steps_accumulated").notNull().default(0),
-  isPartner: boolean("is_partner").notNull().default(false),
+  targetDistanceMeters: integer("target_distance_meters").notNull(), // 획득 시점 egg_types.target_distance_meters 복사
+  distanceAccumulatedMeters: integer("distance_accumulated_meters").notNull().default(0),
+  // 파트너 지정은 순수 기기 로컬 상태 — 서버는 파트너 개념을 갖지 않는다(Document/temp.md Part 1).
+  // POST /api/distance/sync가 "이번에 거리를 적립할 알 id 목록"을 클라에서 직접 받아 처리함.
   acquiredAt: timestamp("acquired_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -290,28 +309,21 @@ export const userEggs = pgTable("user_eggs", {
     table.tourismSpotId,
     table.acquiredAt,
   ),
-  check("user_eggs_target_steps_positive", sql`${table.targetSteps} > 0`),
+  check("user_eggs_target_distance_positive", sql`${table.targetDistanceMeters} > 0`),
   check(
-    "user_eggs_steps_accumulated_non_negative",
-    sql`${table.stepsAccumulated} >= 0`,
+    "user_eggs_distance_accumulated_non_negative",
+    sql`${table.distanceAccumulatedMeters} >= 0`,
   ),
 ]);
 
-export const stepSyncLogs = pgTable("step_sync_logs", {
-  id: serial("id").primaryKey(),
-  userId: uuid("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  deltaSteps: integer("delta_steps").notNull(),
-  syncedAt: timestamp("synced_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-}, (table) => [
-  check("step_sync_logs_delta_steps_non_negative", sql`${table.deltaSteps} >= 0`),
-]);
+// `distance_sync_logs`(거리 동기화 감사 로그)는 삭제됨(Document/temp.md Part 2) — 코드에서 읽는
+// 곳이 없는 write-only 테이블이었고, 거리 타당성 검증은 users.last_distance_sync_at 기준 클램프
+// 게이트로 대체. 이력 기반 검사(슬라이딩 윈도 한도·포렌식·멱등성 원장)가 실제로 필요해지면 그때
+// 인덱스·보존정책·applied/rejected_reason 컬럼을 갖춰 새로 만든다.
 
 export const userMonsters = pgTable("user_monsters", {
   id: uuid("id").primaryKey(), // 클라이언트 생성 UUIDv7 (user_eggs와 동일한 이유)
+  // ⚠️ 탈퇴 익명화 후엔 익명 버킷 유저 id일 수 있음 — user_eggs.user_id 주석 참고.
   userId: uuid("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
@@ -330,4 +342,16 @@ export const userMonsters = pgTable("user_monsters", {
   hatchedAt: timestamp("hatched_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
+});
+
+// ── 시스템/운영 ────────────────────────────────────────────────────────────
+
+// §6 회원 탈퇴 데이터 파기 파이프라인 — AS의 deleted-users/membership-events 폴링 커서.
+// pollerName당 row 하나("deleted-users" | "membership-events") — 두 스트림은 서로 독립된 시퀀스라
+// 커서를 절대 공유하면 안 됨(TypeButter 참고 구현과 동일 원칙).
+export const pollingCursors = pgTable("polling_cursors", {
+  pollerName: text("poller_name").primaryKey(),
+  sinceTimestamp: timestamp("since_timestamp", { withTimezone: true }).notNull(),
+  sinceId: bigint("since_id", { mode: "number" }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

@@ -1,0 +1,14 @@
+{
+  "name": "tourmon-asset-cdn-worker",
+  "version": "0.0.1",
+  "private": true,
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5",
+    "typescript": "^5",
+    "wrangler": "^4"
+  },
+  "scripts": {
+    "start": "wrangler dev",
+    "deploy": "wrangler deploy"
+  }
+}

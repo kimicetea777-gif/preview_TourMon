@@ -1,0 +1,8 @@
+node_modules
+.next
+.git
+.env
+.env.*
+npm-debug.log
+cloudflare-worker
+scripts/map-pipeline/data

@@ -61,11 +61,15 @@ class ContentTypeCount {
 class TourismSpotDetail {
   final String? overview;
   final String? homepage;
+  // en 요청인데 매칭된 영문 content가 없어 서버가 국문으로 폴백했으면 false — 영어 화면에서
+  // overview가 사실은 한국어임을 화면에 표시하기 위한 구분값(실기기 확인, Document/temp.md 참고).
+  final bool usedEnglish;
   final List<TourismSpotImage> images;
 
   TourismSpotDetail({
     required this.overview,
     required this.homepage,
+    required this.usedEnglish,
     required this.images,
   });
 
@@ -73,6 +77,7 @@ class TourismSpotDetail {
     return TourismSpotDetail(
       overview: json['overview'] as String?,
       homepage: json['homepage'] as String?,
+      usedEnglish: json['usedEnglish'] as bool? ?? true,
       images: (json['images'] as List<dynamic>)
           .map((e) => TourismSpotImage.fromJson(e as Map<String, dynamic>))
           .toList(),

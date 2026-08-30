@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -9,13 +11,16 @@ import 'auth_session.dart';
 import 'authorized_api_client.dart';
 import 'nickname_dialog.dart';
 
-/// 6단계 Phase 2 — 지도 화면 AppBar의 로그인/계정 진입점 (init_plan.md 4-1 "게스트 → 회원가입").
-/// 게스트 상태에서 누르면 `flutter_web_auth_2` 로그인 → 온보딩(닉네임) 여부 확인 → 필요하면 입력받음.
-/// 로그인 상태에서 누르면 마이페이지(`MyPageScreen`)로 이동(온보딩이 안 끝난 상태로 남아있었으면
-/// 닉네임 입력으로 이어서 보냄 — 로그인 직후 흐름이 중간에 끊겨도 다시 들어올 방법이 있어야 함).
+/// 6단계 Phase 2 — 지도 화면 AppBar의 계정 진입점 (init_plan.md 4-1 "게스트 → 회원가입").
+/// 로그인 여부와 무관하게 항상 마이페이지(`MyPageScreen`)로 이동 — 게스트 상태여도 언어 선택/
+/// 관광지 재동기화 같은 로그인 무관 기능을 쓸 수 있어야 해서(2026-08-26, 사용자 리포트: 예전엔
+/// 게스트가 이 버튼을 누르면 곧장 로그인 브라우저가 떠서 그 기능들에 접근할 방법이 없었음).
+/// 로그인 자체는 `MyPageScreen` 안의 "로그인" 버튼을 눌러야만 시작됨(온보딩이 안 끝난 상태로
+/// 남아있었으면 닉네임 입력으로 이어서 보냄 — 로그인 직후 흐름이 중간에 끊겨도 다시 들어올
+/// 방법이 있어야 함).
 ///
-/// 게스트 모드는 그대로 완전히 동작(CLAUDE.md "게스트 모드로 핵심 루프 먼저") — 이 버튼은 선택적
-/// 진입점일 뿐, 로그인 안 해도 지도/알/부화/도감은 지금까지와 동일하게 동작함.
+/// 게스트 모드는 그대로 완전히 동작(CLAUDE.md "게스트 모드로 핵심 루프 먼저") — 로그인은 선택적
+/// 기능일 뿐, 안 해도 지도/알/부화/도감은 지금까지와 동일하게 동작함.
 class AccountButton extends StatefulWidget {
   const AccountButton({super.key});
 
@@ -32,10 +37,8 @@ class _AccountButtonState extends State<AccountButton> {
       if (session.isLoggedIn) {
         await _openMyPage(session);
       } else {
-        await _login(session);
+        await _openMyPageAsGuest();
       }
-    } on AuthCancelledException {
-      // 사용자가 로그인 브라우저를 스스로 닫은 경우 — 에러가 아니므로 조용히 무시.
     } catch (e) {
       if (mounted) _showSnackBar(AppLocalizations.of(context)!.genericErrorMessage('$e'));
     } finally {
@@ -43,19 +46,16 @@ class _AccountButtonState extends State<AccountButton> {
     }
   }
 
-  Future<void> _login(AuthSession session) async {
-    await session.login();
-    if (!mounted) return;
-    final client = AuthorizedApiClient(session, locale: apiLocaleOf(context));
-    final api = AuthApi(client);
-    final profile = await api.fetchProfile();
-    if (!mounted) return;
-    if (profile == null) {
-      await _showNicknameDialog(api, client);
-    } else {
-      _showSnackBar(AppLocalizations.of(context)!.welcomeMessage(profile.nickname));
-      await syncGuestDataWithServer(client);
-    }
+  /// 게스트 상태 진입 — fetchProfile 등 인증이 필요한 API 호출 없이 곧장 마이페이지로 이동.
+  /// 로그인 자체는 MyPageScreen 안의 로그인 버튼(그 화면의 _login, AuthCancelledException 처리도
+  /// 거기서 함)이 담당.
+  Future<void> _openMyPageAsGuest() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) =>
+            const MyPageScreen(initialProfile: null, profileFetchFailed: false),
+      ),
+    );
   }
 
   /// 다이얼로그 자체는 `nickname_dialog.dart`(컨트롤러 dispose 타이밍 버그 수정 내역 참고) 공용 위젯.
@@ -90,7 +90,8 @@ class _AccountButtonState extends State<AccountButton> {
     var fetchFailed = false;
     try {
       profile = await api.fetchProfile();
-    } catch (_) {
+    } catch (e) {
+      developer.log('마이페이지 진입 시 fetchProfile 실패: $e', name: 'AccountButton');
       fetchFailed = true;
     }
     if (!mounted) return;
@@ -101,12 +102,11 @@ class _AccountButtonState extends State<AccountButton> {
       await _showNicknameDialog(api, client);
       return;
     }
-    if (profile != null) {
-      // 기존 로그인 사용자 — 정상 케이스는 이미 로그인 시점에 마이그레이션이 끝나 플래그가
-      // 있으므로 아무 일도 안 함. 플래그 없이 재로그인하는 예외 케이스(앱 재설치 등)만 여기서 구제.
-      await syncGuestDataWithServer(client);
-      if (!mounted) return;
-    }
+    // 기존 로그인 사용자(profile != null)는 여기서 syncGuestDataWithServer를 다시 안 돌림 —
+    // 마이그레이션/복구는 이미 로그인 시점(MyPageScreen._login/_showNicknameDialog)에 한 번
+    // 실행됐고, 마이페이지를 여닫을 때마다 서버 전체 알/도감을 다시 fetch하는 게 체감 로딩을
+    // 불필요하게 늦추고 있었음(사용자 피드백, 2026-08-19). 재설치 등으로 마이그레이션 플래그
+    // 자체가 없는 예외 케이스는 다음 로그인 때 자연히 다시 실행되므로 여기서 구제할 필요 없음.
 
     await Navigator.of(context).push(
       MaterialPageRoute(
@@ -134,9 +134,9 @@ class _AccountButtonState extends State<AccountButton> {
               child: CircularProgressIndicator(strokeWidth: 2),
             )
           : Icon(session.isLoggedIn ? Icons.person : Icons.person_outline),
-      tooltip: session.isLoggedIn
-          ? AppLocalizations.of(context)!.accountLabel
-          : AppLocalizations.of(context)!.loginLabel,
+      // 로그인 여부와 무관하게 항상 마이페이지로 이동하므로(위 클래스 doc 참고) 툴팁도 상태와
+      // 무관하게 통일 — "로그인"이라고 하면 눌렀을 때 곧장 로그인되는 것처럼 오해할 수 있음.
+      tooltip: AppLocalizations.of(context)!.myPageTitle,
       onPressed: busy ? null : () => _onPressed(session),
     );
   }

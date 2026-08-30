@@ -1,3 +1,4 @@
+import 'package:flutter_map/flutter_map.dart' show LatLngBounds;
 import 'package:latlong2/latlong.dart';
 
 /// 1단계 배경 지도 설정값 — 하드코딩 금지 원칙에 따라 이 파일 한 곳에 모음.
@@ -44,19 +45,52 @@ class MapConfig {
   /// 결과도 커지는 문제가 있음(Document/temp.md 참고, 계산상 예상값은 z9였음)
   static const double minZoom = 13;
 
-  /// 초기 지도 중심 — 서울시청 부근
+  /// 초기 지도 중심 — 서울시청 부근. 첫 GPS 픽스 전까지만 잠깐 보이는 폴백값(초기 줌은
+  /// [followModeZoom] 그대로 씀, map_screen.dart MapOptions.initialZoom 참고).
   static const LatLng initialCenter = LatLng(37.5665, 126.9780);
-  static const double initialZoom = 13;
 
   /// FMTC(flutter_map_tile_caching) 로컬 캐시 스토어 이름
   static const String tileCacheStoreName = 'seoul_incheon';
 
+  /// 타일 갱신 스로틀 간격 — flutter_map 기본(`ignoreTapEvents`)은 카메라가 움직이는 모든
+  /// 프레임마다 타일을 요청해서, 팬/줌 도중 불필요한 요청(축소 시 중간 z15·z14 레벨 등)이 쏟아짐.
+  /// `throttle`을 걸면 이동 중에는 이 간격당 1회로 제한하고, 이동이 멈추면 마지막 위치로 한 번 더
+  /// 갱신(trailing)해서 최종 화면은 항상 정확히 채워짐. `debounce`(멈춘 뒤에만 갱신)와 달리
+  /// 드래그·축소 도중에도 지도가 계속 따라와서 "멈칫"이 없음 — 걸어다니며 주변을 훑는 사용 패턴에
+  /// 맞춰 이쪽을 택함(R2 egress 무료 + FMTC 캐시라 중간 레벨 절감 효과는 작음). 200ms = 이동 중
+  /// 초당 최대 5회 갱신(잠정값, 실측 후 조정).
+  static const Duration tileUpdateThrottle = Duration(milliseconds: 200);
+
   /// FAB로 "현재 위치로 이동"(팔로우 모드 켜기) 실행 시 맞추는 줌 레벨 — 도착 직후 바로 주변
-  /// 마커가 잘 보이는 확대 수준(잠정값, initialZoom(13)보다 훨씬 가깝게).
-  static const double followModeZoom = 17;
+  /// 마커가 잘 보이는 확대 수준(2026-08-26, 사용자 요청으로 17→18. maxZoom(18)과 같은 값이라
+  /// 더 깊이는 못 감). 앱 실행 시 초기 줌으로도 그대로 씀(map_screen.dart MapOptions.initialZoom
+  /// 참고 — FAB를 누른 것과 같은 화면으로 시작하도록).
+  static const double followModeZoom = 18;
+
+  /// 알 획득 판정 반경(미터) — 지도 화면에서 모든 사용자에게 원으로 시각화(2026-08-26, 사용자
+  /// 요청). 서버 EGG_ACQUISITION_RADIUS_METERS(TourMon/src/lib/game-config.ts)와 반드시 같은
+  /// 값으로 유지할 것 — 서버 값이 바뀌면 여기도 같이 고쳐야 함. 실제 알 획득 판정은 항상 서버가
+  /// 하고(tourism_spot_sheet.dart 주석 참고) 이 값은 순수 시각화 전용이라, "값을 중복 보관하지
+  /// 않는다" 원칙의 의도적 예외임.
+  static const double eggAcquisitionRadiusMeters = 45;
 
   /// 카메라 팔로우 모드 중 이 속도(m/s)를 넘으면 카메라 재중심을 일시정지(파란 점은 계속 움직임) —
   /// 차량 이동 중 GPS 업데이트마다 카메라가 튀며 타일/마커를 급하게 재조회하는 걸 막기 위함
   /// (Document/temp.md 참고). 도보(~1.4m/s)보다 넉넉하게 잡아 러닝까지는 허용 — 실측/조정 전 잠정값.
   static const double maxWalkingSpeedMps = 4.0;
+
+  /// 직전 GPS 픽스 이후 이만큼 시간이 지난 뒤 받은 픽스는 [maxWalkingSpeedMps] 속도 판정에서
+  /// 제외 — 화면을 끄고 이동했다가 다시 켜면(실기기 확인, Document/temp.md 참고) OS가 오랜만에
+  /// 재획득한 첫 픽스의 `Position.speed`를 실제 이동과 무관하게 크게 보고하는 경우가 있어, 그
+  /// 한 번의 픽스만으로 "속도 초과" 오탐(잘못된 "너무 빨라서..." 알림)이 뜨는 걸 막기 위함.
+  static const Duration maxGpsFixGapForSpeedCheck = Duration(seconds: 10);
+
+  /// 서울+인천 서비스 지역 — 실제 배경 지도(PMTiles) 커버 범위와 반드시 같은 값으로 유지할 것
+  /// (TourMon/scripts/map-pipeline/config.ts의 BBOX 미러링). 이 범위 밖에서는 타일이 없어 회색
+  /// 화면만 보이므로, 카메라를 이 범위 밖으로는 자동으로 이동시키지 않고 대신 안내 메시지를 띄움
+  /// (Document/temp.md 참고).
+  static final LatLngBounds serviceAreaBounds = LatLngBounds(
+    const LatLng(37.2, 126.35),
+    const LatLng(37.75, 127.2),
+  );
 }

@@ -35,5 +35,32 @@ services:
     volumes:
       - ./scripts/map-pipeline/data:/data
 
+  # 미니PC 프로덕션 배포 전용 — 로컬 개발은 `npm run dev`로 호스트에서 직접 돌리므로 이 서비스를 안 씀.
+  # profiles로 뺀 이유: 이게 없으면 로컬에서 습관적으로 쓰는 `docker compose up -d`(인자 없음)가
+  # postgres/pmtiles-server뿐 아니라 이 서비스까지 같이 빌드·기동해버림 — `docker compose up -d app`처럼
+  # 이름을 명시하면 profile 여부와 무관하게 그대로 기동되므로(Compose 공식 동작) 배포 절차(how_to_build.md)엔
+  # 영향 없음.
+  # 배포 절차는 Document/how_to_build.md 참고(Auth_Server와 동일하게 docker save/scp로 이미지 전달).
+  app:
+    profiles: ["prod"]
+    build:
+      context: .
+    image: tourmon-api:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # .env의 DATABASE_URL은 호스트에서 접근할 때 쓰는 localhost:${POSTGRES_PORT} 기준값 —
+      # 컨테이너 안에서는 같은 compose 네트워크의 서비스명(postgres)과 내부 포트(5432)로 다시 잡아야 함
+      # (Auth_Server docker-compose.yml의 DB_URL 오버라이드와 동일 패턴)
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    ports:
+      # 호스트 포트만 APP_PORT로 뺌 — 컨테이너 내부 포트(3000)는 Dockerfile의 EXPOSE/PORT 기준이라 고정.
+      # 미니PC의 3000번이 이미 다른 프로세스에서 쓰이고 있어 3001로 결정(Document/how_to_build.md 참고)
+      - "127.0.0.1:${APP_PORT}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   postgres_data:

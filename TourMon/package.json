@@ -13,11 +13,15 @@
     "map:package": "tsx scripts/map-pipeline/04-package.ts",
     "map:upload": "tsx scripts/map-pipeline/05-upload.ts",
     "db:seed": "tsx scripts/seed.ts",
+    "db:migrate": "drizzle-kit migrate",
     "tour:sync": "tsx scripts/tour-sync/sync.ts",
     "tour:eng-match": "tsx scripts/tour-sync/eng-match.ts",
     "tour:dedupe-spots": "tsx scripts/tour-sync/dedupe-spots.ts",
     "vouchers:cleanup": "tsx scripts/cleanup-egg-vouchers.ts",
-    "worker:deploy": "npm --prefix cloudflare-worker/cloudflare run deploy"
+    "monster-art:upload": "tsx scripts/monster-art-upload.ts",
+    "notice:publish": "tsx scripts/publish-app-notice.ts",
+    "worker:deploy": "npm --prefix cloudflare-worker/cloudflare run deploy",
+    "worker:assets:deploy": "npm --prefix cloudflare-worker/assets run deploy"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1110.0",
@@ -25,9 +29,11 @@
     "drizzle-orm": "^0.45.2",
     "jose": "^6.2.8",
     "next": "16.3.1",
+    "node-cron": "^4.6.0",
     "postgres": "^3.4.9",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "sharp": "^0.35.3",
     "uuid": "^14.0.1"
   },
   "devDependencies": {
@@ -37,6 +43,7 @@
     "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.3.1",
+    "ffmpeg-static": "^5.3.0",
     "tsx": "^4.23.12",
     "typescript": "^5"
   }
