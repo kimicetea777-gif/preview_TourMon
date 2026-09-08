@@ -41,7 +41,20 @@ export const MAX_PLAUSIBLE_SPEED_KMH = 15;
 // Part 2 미결 사항).
 export const DISTANCE_SYNC_ELAPSED_CAP_HOURS = 24;
 
+// 거리 측정 이중화(Document/temp.md 4번)의 pedometer 백그라운드 보너스 카덴스 상한 — 분당 걸음
+// 수 기준. 클라이언트(Flutter GameConfig.maxPlausibleStepsPerMinute)가 `paused`~`resumed` 걸음
+// diff를 이 값으로 이미 클램프하고, 서버는 지금은 MAX_PLAUSIBLE_SPEED_KMH 속도 클램프가 최후
+// 방어선으로 충분해 이 값을 직접 쓰진 않지만(temp.md "서버 쪽 추가 작업 불필요"), stepsToMeters
+// 계열 상수와 같은 미러링 원칙에 따라 값 일치를 위해 여기에도 둔다.
+export const MAX_PLAUSIBLE_STEPS_PER_MINUTE = 200;
+
 // 파트너 알 최대 동시 진행 개수 — Flutter GameConfig.maxPartnerEggs 미러(init_plan.md 4-3). 파트너
 // 상태 자체는 순수 기기 로컬이고 서버엔 없음(Document/temp.md Part 1) — 이 값은 /api/distance/sync가
 // 받은 partnerEggIds 개수의 싼 sanity 가드로만 쓰인다.
 export const MAX_PARTNER_EGGS = 2;
+
+// 앱 최초 설치 웰컴 알(POST /api/eggs/welcome)의 등급 — 항상 common 고정(2026-09-01 결정). 설치
+// 직후 상위 등급이 나오면 스팟 사냥 루프의 맛이 죽고, 재설치 파밍 유인도 커지기 때문. 활성 common
+// egg_type이 여럿이면 그 안에서 weight로 롤한다. 재설치 파밍은 허용 — 낮은 등급 1개 + 부화에 거리
+// 필요 + egg_vouchers 90일 TTL이 상한 역할(Document/temp.md "앱 설치 웰컴 알").
+export const WELCOME_EGG_RARITY = "common" as const;

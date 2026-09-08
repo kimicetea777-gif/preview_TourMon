@@ -1,8 +1,10 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../audio/sfx.dart';
 import '../../config/game_config.dart';
 import '../../config/sketch/sketch_button.dart';
 import '../../config/sketch/sketch_card.dart';
@@ -16,7 +18,6 @@ import '../auth/auth_session.dart';
 import '../auth/authorized_api_client.dart';
 import '../distance/distance_refresh_info_sheet.dart';
 import '../distance/distance_tracker_service.dart';
-import '../distance/health_connect_notice_dialog.dart';
 import '../monster/monster_config_api.dart';
 import '../monster/monster_determination.dart';
 import '../monster/monster_repository.dart';
@@ -83,9 +84,9 @@ class _EggInventoryScreenState extends State<EggInventoryScreen> {
     });
   }
 
-  // Health Connect 동기화는 기본 4분 주기라 방금 걸은 게 화면에 바로 안 보여서 "버그 아닌가"
-  // 오해하기 쉬움(실기기 확인, Document/temp.md 참고) — 유저가 원할 때 직접 한 번 당겨올 수 있는
-  // 탈출구. syncNow()는 이미 부화 직전에도 쓰던 기존 공개 메서드라 새 로직 없이 그대로 재사용.
+  // 서버 flush는 기본 주기(GameConfig.distanceServerSyncInterval)라 방금 걸은 게 화면에 바로 안
+  // 보여서 "버그 아닌가" 오해하기 쉬움 — 유저가 원할 때 직접 한 번 당겨올 수 있는 탈출구.
+  // syncNow()는 이미 부화 직전에도 쓰던 기존 공개 메서드라 새 로직 없이 그대로 재사용.
   Future<void> _onSyncPressed() async {
     setState(() => _syncing = true);
     try {
@@ -98,42 +99,26 @@ class _EggInventoryScreenState extends State<EggInventoryScreen> {
 
   Future<void> _onPartnerToggled(UserEgg egg, bool wantPartner) async {
     final l10n = AppLocalizations.of(context)!; // await 전에 미리 확보 — 아래 참고
-    final session = context.read<AuthSession>();
 
-    if (wantPartner) {
-      // 슬롯 초과면 여기서 끝 — Health Connect 안내도, DB 쓰기도 하지 않는다.
-      if (await _eggRepository.countPartners() >= GameConfig.maxPartnerEggs) {
-        _showSnackBar(l10n.partnerLimitError(GameConfig.maxPartnerEggs));
-        return;
-      }
-      // 파트너 알을 처음(또는 다시) 지정하는 시점 — Health Connect 권한을 여기서 처음 요청
-      // (Document/temp.md 미결 사항 "just-in-time" 결정). 권한이 아직 없을 때만 먼저 안내를
-      // 띄우고, 여기서 취소하면 파트너 플래그를 아예 쓰지 않는다 — 버튼을 눌렀다가 취소했는데도
-      // 파트너로 설정돼버리던 문제 수정(setPartner를 안내보다 먼저 호출하던 순서 때문이었음).
-      // 예고 없이 곧장 Play Store 설치 화면으로 넘어가 당황스러웠던 문제도 이 안내로 방지.
-      final alreadyGranted = await DistanceTrackerService.instance
-          .hasPermission();
-      if (!alreadyGranted) {
-        if (!mounted) return;
-        final proceed = await showHealthConnectNoticeDialog(context);
-        if (!proceed) return;
-      }
+    // 슬롯 초과면 여기서 끝 — DB 쓰기도 하지 않는다.
+    if (wantPartner &&
+        await _eggRepository.countPartners() >= GameConfig.maxPartnerEggs) {
+      Sfx.instance.play('partner_full');
+      _showSnackBar(l10n.partnerLimitError(GameConfig.maxPartnerEggs));
+      return;
     }
 
+    // 걸음 기록 권한은 여기서 안 건드린다 — "앱이 꺼져 있어도 거리 측정" 토글
+    // ([_BackgroundDistanceCard])이 명시적으로 관리(2026-09-09). 파트너 지정은 GPS 주 경로만으로
+    // 부화가 되므로 권한과 무관하게 진행.
     final ok = await _eggRepository.setPartner(egg.id, wantPartner);
     if (!ok) {
       // countPartners 확인과 setPartner 사이 경합으로 초과된 드문 경우.
+      Sfx.instance.play('partner_full');
       _showSnackBar(l10n.partnerLimitError(GameConfig.maxPartnerEggs));
     } else if (wantPartner) {
-      if (!mounted) return;
-      // 여기서 실제 OS 권한 요청이 일어남(이미 서비스가 돌고 있으면 내부에서 조용히 무시).
-      // 권한 거부/설치 취소로 Health Connect를 못 쓰면 파트너 알은 걸은 거리로 자랄 수 없으므로
-      // 방금 건 파트너 지정을 되돌린다.
-      final started = await DistanceTrackerService.instance.start(session);
-      if (!started) {
-        await _eggRepository.setPartner(egg.id, false);
-        _showSnackBar(l10n.healthConnectDeniedPartnerCancelledMessage);
-      }
+      // 해제(partner_unset)는 무음 — 사용자 요청(2026-09-08).
+      Sfx.instance.play('partner_set');
     }
     await _load();
   }
@@ -321,6 +306,7 @@ class _EggInventoryScreenState extends State<EggInventoryScreen> {
                         padding: const EdgeInsets.all(12),
                         children: [
                           if (isGuest) const _GuestShelfLifeBanner(),
+                          const _BackgroundDistanceCard(),
                           for (final egg in _eggs)
                             _EggCard(
                               egg: egg,
@@ -400,6 +386,10 @@ class _EggCard extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      // 모달은 이 화면의 지역 SketchTheme 서브트리(Overlay) 바깥이라 앱 전역 다크 테마의
+      // 강조색(주황)이 배경에 배어 나옴 — 순수 정보 안내라 크림색으로 고정(내용 자체도
+      // EggTypeInfoSheet 안에서 SketchTheme로 다시 감쌈).
+      backgroundColor: SketchTheme.paperLight,
       builder: (context) => EggTypeInfoSheet(egg: egg),
     );
   }
@@ -410,132 +400,77 @@ class _EggCard extends StatelessWidget {
     final progress = (egg.distanceAccumulatedMeters / egg.targetDistanceMeters)
         .clamp(0.0, 1.0);
     final expired = isGuest && egg.isGuestShelfLifeExpired;
+    // 가로형 컴팩트 카드(2026-08-30, 사용자 요청 — 알이 많아지면 세로로 긴 카드는 훑어보기
+    // 어려움). 왼쪽 열에 작은 알 이미지 + 파트너 토글, 오른쪽 열에 이름/정보 · 거리 · 진행바
+    // (굳은 알은 진행바 대신 치우기, 부화 가능하면 진행바 아래 부화 버튼).
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.only(bottom: 10),
       child: SketchCard(
-        padding: EdgeInsets.zero,
+        padding: const EdgeInsets.all(12),
         fillColor: SketchTheme.paperLight,
         seed: egg.id.hashCode,
-        child: Column(
+        child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              child: Center(
-                child: Opacity(
-                  opacity: expired ? 0.5 : 1,
-                  child: EggImage(rarity: egg.rarity, width: 72),
-                ),
+            SizedBox(
+              width: 52,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Opacity(
+                    opacity: expired ? 0.5 : 1,
+                    child: EggImage(rarity: egg.rarity, width: 44),
+                  ),
+                  // 굳어버린 알은 파트너로 걸어봐야 부화가 안 되므로 토글 자체를 숨김.
+                  if (!expired) ...[
+                    const SizedBox(height: 6),
+                    _PartnerToggle(
+                      isPartner: egg.isPartner,
+                      onToggled: onPartnerToggled,
+                    ),
+                  ],
+                ],
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.all(12),
+            const SizedBox(width: 12),
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
                       Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Flexible(
-                                  child: Text(
-                                    egg.name,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleMedium,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.info_outline,
-                                    size: 18,
-                                  ),
-                                  tooltip: l10n.eggInfoButtonTooltip,
-                                  visualDensity: VisualDensity.compact,
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(),
-                                  onPressed: () => _openInfoSheet(context),
-                                ),
-                              ],
-                            ),
-                            Text(
-                              l10n.distanceProgress(
-                                rarityLabel(context, egg.rarity),
-                                formatKm(egg.distanceAccumulatedMeters),
-                                formatKm(egg.targetDistanceMeters),
-                              ),
-                            ),
-                            if (isGuest) ...[
-                              const SizedBox(height: 3),
-                              _ShelfLifeLine(egg: egg, expired: expired),
-                            ],
-                          ],
+                        child: Text(
+                          egg.name,
+                          style: Theme.of(context).textTheme.titleMedium,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      // 굳어버린 알은 파트너로 걸어봐야 부화가 안 되므로 토글 자체를 숨김.
-                      if (expired)
-                        const SizedBox.shrink()
-                      else
-                        Tooltip(
-                          message: l10n.partnerToggleTooltip,
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(8),
-                            onTap: () => onPartnerToggled(!egg.isPartner),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 4,
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    egg.isPartner
-                                        ? Icons.check_circle
-                                        : Icons.check_circle_outline,
-                                    size: 20,
-                                    color: egg.isPartner
-                                        ? SketchTheme.accent
-                                        : SketchTheme.ink.withValues(
-                                            alpha: 0.3,
-                                          ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    l10n.partnerToggleLabel,
-                                    style: TextStyle(
-                                      fontWeight: egg.isPartner
-                                          ? FontWeight.bold
-                                          : FontWeight.normal,
-                                      color: egg.isPartner
-                                          ? SketchTheme.ink
-                                          : SketchTheme.ink.withValues(
-                                              alpha: 0.4,
-                                            ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
+                      IconButton(
+                        icon: const Icon(Icons.info_outline, size: 18),
+                        tooltip: l10n.eggInfoButtonTooltip,
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () => _openInfoSheet(context),
+                      ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: progress,
-                      minHeight: 8,
+                  const SizedBox(height: 2),
+                  Text(
+                    l10n.distanceProgress(
+                      rarityLabel(context, egg.rarity),
+                      formatKm(egg.distanceAccumulatedMeters),
+                      formatKm(egg.targetDistanceMeters),
                     ),
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
-                  if (expired) ...[
-                    const SizedBox(height: 8),
+                  if (isGuest) ...[
+                    const SizedBox(height: 3),
+                    _ShelfLifeLine(egg: egg, expired: expired),
+                  ],
+                  const SizedBox(height: 8),
+                  if (expired)
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton.icon(
@@ -543,35 +478,91 @@ class _EggCard extends StatelessWidget {
                         icon: const Icon(Icons.delete_outline, size: 18),
                         label: Text(l10n.discardExpiredEggButton),
                       ),
-                    ),
-                  ] else if (egg.isReadyToHatch) ...[
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: SketchButton(
-                        onPressed: isHatching ? null : onHatchPressed,
-                        leading: isHatching
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: SketchTheme.paper,
-                                ),
-                              )
-                            : const Icon(
-                                Icons.auto_awesome,
-                                color: SketchTheme.paper,
-                                size: 18,
-                              ),
-                        label: l10n.hatchButton,
+                    )
+                  else ...[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        minHeight: 8,
                       ),
                     ),
+                    if (egg.isReadyToHatch) ...[
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: SketchButton(
+                          onPressed: isHatching ? null : onHatchPressed,
+                          leading: isHatching
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: SketchTheme.paper,
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.auto_awesome,
+                                  color: SketchTheme.paper,
+                                  size: 18,
+                                ),
+                          label: l10n.hatchButton,
+                        ),
+                      ),
+                    ],
                   ],
                 ],
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 컴팩트 카드 왼쪽 열의 파트너 토글 — 알 이미지 아래에 아이콘+라벨을 세로로 쌓은 작은 버튼.
+/// 체크하면 이 알에 걷기 거리가 쌓인다(파트너 지정은 순수 기기 로컬 상태, CLAUDE.md 참고).
+class _PartnerToggle extends StatelessWidget {
+  final bool isPartner;
+  final ValueChanged<bool> onToggled;
+
+  const _PartnerToggle({required this.isPartner, required this.onToggled});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return Tooltip(
+      message: l10n.partnerToggleTooltip,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => onToggled(!isPartner),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                isPartner ? Icons.check_circle : Icons.check_circle_outline,
+                size: 22,
+                color: isPartner
+                    ? SketchTheme.accent
+                    : SketchTheme.ink.withValues(alpha: 0.3),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                l10n.partnerToggleLabel,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: isPartner ? FontWeight.bold : FontWeight.normal,
+                  color: isPartner
+                      ? SketchTheme.ink
+                      : SketchTheme.ink.withValues(alpha: 0.4),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -659,6 +650,153 @@ class _GuestShelfLifeBanner extends StatelessWidget {
                 height: 1.4,
                 color: SketchTheme.ink.withValues(alpha: 0.8),
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// "앱이 꺼져 있어도 거리 측정" 토글 — 걸음(신체 활동) 권한을 명시적으로 켜고 끈다.
+/// 예전엔 파트너 지정 시점에 매번 권한 다이얼로그를 띄웠으나(2026-09-09 제거) 별도 스위치로 분리.
+/// OFF는 앱 레벨 플래그일 뿐 — 안드로이드는 앱이 자기 OS 권한을 회수할 수 없다(ⓘ가 안내).
+class _BackgroundDistanceCard extends StatefulWidget {
+  const _BackgroundDistanceCard();
+
+  @override
+  State<_BackgroundDistanceCard> createState() => _BackgroundDistanceCardState();
+}
+
+class _BackgroundDistanceCardState extends State<_BackgroundDistanceCard> {
+  final _tracker = DistanceTrackerService.instance;
+  bool _enabled = false;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final on = await _tracker.isBackgroundDistanceEnabled();
+    if (mounted) setState(() => _enabled = on);
+  }
+
+  Future<void> _toggle(bool value) async {
+    if (_busy) return;
+    final l10n = AppLocalizations.of(context)!;
+    final session = context.read<AuthSession>();
+    setState(() => _busy = true);
+    try {
+      if (!value) {
+        await _tracker.disableBackgroundDistance();
+        if (mounted) setState(() => _enabled = false);
+        return;
+      }
+      // 영구 거부 상태면 OS 팝업이 더는 안 뜨므로 설정 앱으로 보낸다(temp.md 6-b).
+      if (await _tracker.isActivityPermissionPermanentlyDenied()) {
+        if (!mounted) return;
+        final go = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(l10n.backgroundDistanceToggleLabel),
+            content: Text(l10n.backgroundDistancePermanentlyDeniedMessage),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: Text(l10n.cancelButton),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: Text(l10n.activityPermissionOpenSettingsButton),
+              ),
+            ],
+          ),
+        );
+        if (go ?? false) await _tracker.openPermissionSettings();
+        return;
+      }
+      final ok = await _tracker.enableBackgroundDistance(session);
+      if (!mounted) return;
+      if (ok) {
+        setState(() => _enabled = true);
+      } else {
+        rootScaffoldMessengerKey.currentState?.showSnackBar(
+          SnackBar(
+            content: Text(l10n.backgroundDistancePermissionRequiredMessage),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _showInfo() {
+    final l10n = AppLocalizations.of(context)!;
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l10n.backgroundDistanceToggleLabel),
+        content: Text(l10n.backgroundDistanceInfoBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(l10n.confirmButton),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (defaultTargetPlatform != TargetPlatform.android) {
+      return const SizedBox.shrink();
+    }
+    final l10n = AppLocalizations.of(context)!;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.fromLTRB(12, 2, 4, 2),
+      decoration: BoxDecoration(
+        color: SketchTheme.paperLight,
+        border: Border.all(color: SketchTheme.ink.withValues(alpha: 0.25)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              l10n.backgroundDistanceToggleLabel,
+              style: const TextStyle(fontSize: 14, color: SketchTheme.ink),
+            ),
+          ),
+          IconButton(
+            icon: Icon(
+              Icons.info_outline,
+              size: 20,
+              color: SketchTheme.ink.withValues(alpha: 0.7),
+            ),
+            tooltip: l10n.backgroundDistanceToggleLabel,
+            onPressed: _showInfo,
+          ),
+          Switch(
+            value: _enabled,
+            onChanged: _busy ? null : _toggle,
+            thumbColor: WidgetStateProperty.resolveWith(
+              (states) => states.contains(WidgetState.selected)
+                  ? SketchTheme.paperLight
+                  : SketchTheme.ink.withValues(alpha: 0.55),
+            ),
+            trackColor: WidgetStateProperty.resolveWith(
+              (states) => states.contains(WidgetState.selected)
+                  ? SketchTheme.accent
+                  : SketchTheme.paperDark,
+            ),
+            trackOutlineColor: WidgetStateProperty.all(
+              SketchTheme.ink.withValues(alpha: 0.35),
             ),
           ),
         ],

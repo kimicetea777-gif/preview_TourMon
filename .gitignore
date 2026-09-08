@@ -1,2 +1,8 @@
 # Claude Code runtime state (session-specific, not project config)
 .claude/scheduled_tasks.lock
+
+# 효과음 파이프라인 원본(WAV/mp3) — 용량 크고 재현 가능. 최종 산출물만 커밋:
+# Resource/audio/ogg_files/*.ogg + TourMon_App/assets/audio/*.ogg
+# (Sound_format_tool/convert.py 로 chosed/ → ogg_files/ 재생성)
+Resource/audio/Ori/
+Resource/audio/chosed/

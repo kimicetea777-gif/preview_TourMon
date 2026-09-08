@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../config/game_config.dart';
+import '../../config/sketch/sketch_theme.dart';
 import '../../l10n/api_locale.dart';
 import '../../l10n/app_localizations.dart';
 import '../../l10n/enum_labels.dart';
@@ -50,7 +51,7 @@ class _EggTypeInfoSheetState extends State<EggTypeInfoSheet> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final egg = widget.egg;
-    return SafeArea(
+    final content = SafeArea(
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -157,6 +158,11 @@ class _EggTypeInfoSheetState extends State<EggTypeInfoSheet> {
         ),
       ),
     );
+    // showModalBottomSheet의 Overlay는 알 보관함 화면의 지역 SketchTheme 서브트리가 아니라서
+    // 그림책 테마가 자동 적용되지 않음 — 여기서 다시 감싼다(egg_odds_overview_dialog.dart와 동일).
+    // 호출부(egg_inventory_screen.dart)가 시트 배경도 SketchTheme.paperLight로 지정하므로,
+    // 이 Theme으로 본문 텍스트/아이콘이 크림색 위에서 읽히는 잉크색이 된다.
+    return Theme(data: SketchTheme.themeData, child: content);
   }
 }
 

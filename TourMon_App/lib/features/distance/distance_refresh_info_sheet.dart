@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../config/game_config.dart';
+import '../../config/sketch/sketch_theme.dart';
 import '../../l10n/app_localizations.dart';
 
 /// 거리 수치가 실시간이 아니라 [GameConfig.distanceServerSyncInterval] 주기로만 갱신된다는 것과
@@ -13,6 +14,10 @@ Future<void> showDistanceRefreshInfoSheet(BuildContext context) {
   return showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
+    // 이 시트는 알 보관함/지도 화면의 지역 SketchTheme 서브트리 바깥(Overlay)이라 앱 전역 다크
+    // 테마의 강조색(주황)이 배어 나옴 — 순수 정보 안내에 경고색은 어울리지 않아 크림색 배경 +
+    // 잉크색 아이콘/본문으로 고정(egg_inventory_screen.dart의 _GuestShelfLifeBanner와 같은 처리).
+    backgroundColor: SketchTheme.paperLight,
     builder: (context) {
       final l10n = AppLocalizations.of(context)!;
       final minutes = GameConfig.distanceServerSyncInterval.inMinutes;
@@ -25,12 +30,18 @@ Future<void> showDistanceRefreshInfoSheet(BuildContext context) {
             children: [
               Row(
                 children: [
-                  const Icon(Icons.battery_saver, size: 20),
+                  Icon(
+                    Icons.battery_saver,
+                    size: 20,
+                    color: SketchTheme.ink.withValues(alpha: 0.7),
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       l10n.distanceRefreshInfoTitle,
-                      style: Theme.of(context).textTheme.titleMedium,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: SketchTheme.ink,
+                      ),
                     ),
                   ),
                 ],
@@ -38,7 +49,9 @@ Future<void> showDistanceRefreshInfoSheet(BuildContext context) {
               const SizedBox(height: 12),
               Text(
                 l10n.distanceRefreshInfoBody(minutes),
-                style: Theme.of(context).textTheme.bodyMedium,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: SketchTheme.ink.withValues(alpha: 0.8),
+                ),
               ),
             ],
           ),

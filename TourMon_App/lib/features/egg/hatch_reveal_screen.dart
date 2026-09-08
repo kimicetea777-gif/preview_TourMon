@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import '../../audio/sfx.dart';
 import '../../l10n/app_localizations.dart';
 import '../monster/monster_species.dart';
 import '../monster/rarity_colors.dart';
@@ -29,13 +30,19 @@ class _HatchRevealScreenState extends State<HatchRevealScreen>
     super.initState();
     _controller = AnimationController(vsync: this, duration: _shakeDuration)
       ..forward();
+    // 흔들림 구간 동안 hatch_crack 루프(sound_effect_plan.md 3-6). 리빌 순간엔 뚝 끊지 않고
+    // 볼륨을 잦아들게(fade: true) — 리빌 전용 효과음은 없음(2026-09-09 결정).
+    Sfx.instance.startCrackLoop();
     Future.delayed(_shakeDuration, () {
-      if (mounted) setState(() => _revealed = true);
+      if (!mounted) return;
+      Sfx.instance.stopCrackLoop(fade: true);
+      setState(() => _revealed = true);
     });
   }
 
   @override
   void dispose() {
+    Sfx.instance.stopCrackLoop();
     _controller.dispose();
     super.dispose();
   }

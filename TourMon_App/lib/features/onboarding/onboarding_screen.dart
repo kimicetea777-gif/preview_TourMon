@@ -17,7 +17,7 @@ const _currentOnboardingVersion = '1';
 /// 앱 최초 실행 시(아직 현재 버전 인트로를 본 적 없으면) 핵심 루프
 /// (마커에서 알 획득 → 파트너 등록 → 걸어서 거리 적립 → 부화)를 4장짜리 전체화면 캐러셀로
 /// 한 번 보여준다. `MapScreen`이 첫 프레임 직후 호출 — 지도는 뒤에서 로딩되고, 사용자가 인트로를
-/// 닫으면 그대로 지도가 보인다. 위치/Health Connect 권한 다이얼로그는 이 인트로가 대체하지 않고
+/// 닫으면 그대로 지도가 보인다. 위치/신체 활동 권한 다이얼로그는 이 인트로가 대체하지 않고
 /// 각자 필요한 시점에 그대로 뜬다(just-in-time).
 Future<void> showOnboardingIfNeeded(BuildContext context) async {
   const settings = AppSettingsRepository();

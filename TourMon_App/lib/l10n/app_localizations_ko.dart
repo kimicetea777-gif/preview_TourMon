@@ -46,6 +46,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get loginLabel => '로그인';
 
   @override
+  String get loginComingSoonNote => '회원 로그인은 준비 중이에요. 지금은 게스트로 즐겨 주세요.';
+
+  @override
   String loggedInAs(String nickname) {
     return '$nickname님으로 로그인되어 있습니다.';
   }
@@ -125,7 +128,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String guestEggShelfLifeBanner(int days) {
-    return '로그인하지 않은 알은 획득 후 $days일이 지나면 굳어서 부화할 수 없게 돼요. 로그인하면 계정에 영구 보관됩니다.';
+    return '알은 획득 후 $days일이 지나면 굳어서 부화할 수 없게 돼요. 그 전에 부화시켜 주세요.';
   }
 
   @override
@@ -157,7 +160,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String eggInfoGuestShelfLifeNote(int days) {
-    return '로그인 전이라 획득 후 $days일까지만 부화할 수 있어요.';
+    return '이 알은 획득 후 $days일 안에 부화시켜야 해요.';
   }
 
   @override
@@ -197,6 +200,9 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get showMoreButton => '더보기';
+
+  @override
+  String get showLessButton => '접기';
 
   @override
   String detailLoadFailedMessage(String error) {
@@ -363,6 +369,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get languageEnglishOption => 'English';
 
   @override
+  String get soundSectionTitle => '효과음';
+
+  @override
   String get appNotWorkingLabel => '앱이 안돼요';
 
   @override
@@ -519,29 +528,67 @@ class AppLocalizationsKo extends AppLocalizations {
   String get tourApiAttribution => '관광정보·사진 출처: ⓒ한국관광공사 (TourAPI)';
 
   @override
-  String get healthConnectConnectPrompt => '걸은 거리가 안 잡혀요 — Health Connect 연결하기';
+  String get distanceBannerNeedsLocation => '걸은 거리가 안 잡혀요 — 위치 권한 켜기';
 
   @override
-  String get healthConnectNoticeDialogTitle => 'Health Connect 연동 안내';
+  String get activityPermissionBannerWithPartner =>
+      '걸은 거리가 안 잡혀요 — 걸음 기록 권한 켜기';
 
   @override
-  String get healthConnectNoticeBodyMessage =>
-      '파트너 알은 실제로 걸은 거리만큼 자라나요. 이 거리는 특정 제조사 앱이 아니라, 안드로이드가 제공하는 공용 건강 데이터 저장소 \'Health Connect\'에서 가져와요(구글 핏·삼성 헬스 등 다른 건강 앱이 기록한 데이터도 여기 함께 모여요). 계속하면 Health Connect가 없는 경우 설치 화면으로, 있는 경우 권한 요청 화면으로 넘어가요.';
+  String get activityPermissionBannerNoPartner => '걸음 기록에 권한이 필요해요 — 켜기';
 
   @override
-  String get healthConnectDeniedPartnerCancelledMessage =>
-      'Health Connect 권한이 없어 파트너 지정을 취소했어요. 파트너 알은 걸은 거리로 자라기 때문에 권한이 필요해요.';
+  String get activityPermissionNoticeDialogTitle => '걸음 기록 권한 안내';
+
+  @override
+  String get activityPermissionNoticeBodyMessage =>
+      '파트너 알과 \'오늘 거리\'는 실제로 걸은 만큼 자라나요. 앱을 켜 둔 동안은 위치로 거리를 재고, 앱이 꺼져 있던 동안의 이동은 기기의 걸음 센서 기록으로 채워요. 이 걸음 기록을 읽으려면 \'신체 활동\' 권한이 필요해요. 계속하면 권한 요청 화면으로 넘어가요.';
+
+  @override
+  String get activityPermissionOpenSettingsButton => '설정 열기';
+
+  @override
+  String get activityPermissionDeniedPartnerKeptMessage =>
+      '걸음 기록 권한이 없어 앱이 꺼져 있던 동안의 이동은 안 잡혀요. 파트너 지정은 그대로 두었고, 앱을 켜 두고 걸으면 거리는 정상적으로 쌓여요.';
+
+  @override
+  String get backgroundDistanceToggleLabel => '앱이 꺼져 있어도 거리 측정';
+
+  @override
+  String get backgroundDistanceInfoBody =>
+      '켜면 앱을 꺼두거나 다른 앱을 쓰는 동안 걸은 거리도 파트너 알 부화에 반영돼요. 이때 기기의 \'신체 활동(걸음)\' 기록을 읽어요. 켜지 않아도 앱을 열어 둔 채로 걸으면 거리는 정상적으로 쌓여요. 끄면 앱이 걸음 기록을 더는 읽지 않아요 — 권한 자체를 완전히 없애려면 시스템 설정 > 앱 > 권한에서 해제하세요.';
+
+  @override
+  String get backgroundDistancePermissionRequiredMessage =>
+      '신체 활동 권한이 없어 켤 수 없어요.';
+
+  @override
+  String get backgroundDistancePermanentlyDeniedMessage =>
+      '신체 활동 권한이 꺼져 있어요. 시스템 설정에서 직접 허용해 주세요.';
 
   @override
   String get locationConsentDialogTitle => '위치정보 및 이용 연령 확인';
 
   @override
   String get locationConsentBodyMessage =>
-      '알 획득 시 관광지 반경 확인을 위해 위치정보를 실시간으로만 사용하며 저장하지 않습니다. 위치 권한은 기기 설정에서 언제든 꺼서 동의를 철회할 수 있으며, 이 경우 알 획득 등 위치 기반 기능을 이용할 수 없습니다. 자세한 내용은 마이페이지의 개인정보처리방침을 참고하세요.';
+      '위치정보는 알 획득 시 관광지 반경 확인, 걸은 거리 측정, 지도상 현재 위치 표시에 사용됩니다. 이 처리는 전부 기기 안에서만 이루어지며, GPS 좌표나 이동 경로는 서버로 전송되거나 저장되지 않습니다. 거리 측정 결과(집계 거리 값)도 기기에만 저장됩니다. 위치 권한은 기기 설정에서 언제든 꺼서 동의를 철회할 수 있으며, 이 경우 알 획득·거리 측정 등 위치 기반 기능을 이용할 수 없습니다. 자세한 내용은 마이페이지의 개인정보처리방침을 참고하세요.';
 
   @override
   String get locationConsentAgreeCheckboxLabel => '위치정보 수집·이용에 동의합니다';
 
   @override
   String get ageConsentCheckboxLabel => '만 14세 이상입니다';
+
+  @override
+  String get welcomeGiftTitle => '선물이 왔어요!';
+
+  @override
+  String get welcomeGiftBody =>
+      'TourMon에 온 걸 환영해요. 첫 알을 선물로 드려요. 파트너로 지정하고 걸으면 몬스터로 부화해요.';
+
+  @override
+  String get welcomeGiftOpenInventoryButton => '보관함에서 보기';
+
+  @override
+  String get welcomeGiftDismissButton => '닫기';
 }

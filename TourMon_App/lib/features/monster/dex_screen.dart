@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import '../../audio/sfx.dart';
 import '../../config/sketch/sketch_button.dart';
 import '../../config/sketch/sketch_card.dart';
 import '../../config/sketch/sketch_theme.dart';
@@ -88,6 +89,7 @@ class _DexScreenState extends State<DexScreen> {
   void _onSpeciesTapped(MonsterSpecies species) {
     final encounters = _grouped[species.id];
     if (encounters == null || encounters.isEmpty) {
+      Sfx.instance.play('dex_locked');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(AppLocalizations.of(context)!.notDiscoveredMessage),
@@ -95,6 +97,7 @@ class _DexScreenState extends State<DexScreen> {
       );
       return;
     }
+    Sfx.instance.play('dex_open_detail');
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) =>

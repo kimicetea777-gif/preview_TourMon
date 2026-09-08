@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 1.0.1+17
 
 environment:
   sdk: ^3.13.0
@@ -54,9 +54,16 @@ dependencies:
   cached_network_image: ^3.4.1
   url_launcher: ^6.3.1
   flutter_svg: ^2.2.1
-  health: ^13.3.2
+  # 거리 측정 이중화(Document/temp.md) — 주 경로는 GPS 포그라운드 추적(geolocator),
+  # 보조 경로는 raw 걸음 센서(TYPE_STEP_COUNTER). Health Connect/삼성 헬스는 완전히 걷어냄
+  # (삼성 헬스↔Health Connect 동기화가 자주 끊기는 문제 회피).
+  pedometer: ^4.1.1
+  permission_handler: ^11.3.1
   wakelock_plus: ^1.2.10
   package_info_plus: ^10.2.1
+  # 효과음(Document/sound_effect_plan.md). 원본 WAV는 Sound_format_tool로 트림+정규화 후
+  # Resource/audio/ogg_files/ → assets/audio/ 로 복사. lib/audio/sfx.dart가 재생 담당.
+  audioplayers: ^6.1.0
 
 dev_dependencies:
   flutter_test:
@@ -123,6 +130,7 @@ flutter:
   assets:
     - assets/markers/
     - assets/eggs/
+    - assets/audio/
 
   fonts:
     - family: Gaegu

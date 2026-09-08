@@ -70,9 +70,9 @@ class EggRepository {
   /// 생성함) 로컬 row에 이관 완료 시각을 박아 다음 로그인의 마이그레이션 대상에서 뺌. 안 주면
   /// (게스트 획득) NULL로 남아 마이그레이션 대상이 됨.
   Future<UserEgg> insertEgg({
-    required int tourismSpotId,
+    required int? tourismSpotId,
     required String? tourismSpotTitle,
-    required int contentTypeId,
+    required int? contentTypeId,
     required int eggTypeId,
     required String rarity,
     required String name,
@@ -121,16 +121,19 @@ class EggRepository {
         ...egg.toMap(),
         'synced_at': syncedAt,
       }, conflictAlgorithm: ConflictAlgorithm.ignore);
-      // Part 3-B(Document/temp.md) — 이미 로컬에 있어 insert가 ignore된 알도 부화 판정 기준값
-      // (서버 PG)에 수렴시킴. 회원은 distance_accumulated_meters가 서버 authoritative: 로컬이
-      // 속도 클램프/유실/mock 감지로 서버보다 앞서 있으면 "부화 준비 완료"를 보고 눌렀다가
-      // 서버 부화에서 422를 맞는 불일치가 생김(재로그인/새 기기 시점 정합). 방금 insert된 알은
-      // 이미 같은 값이라 이 update가 무해(멱등). is_partner 등 다른 로컬 필드는 안 건드림.
-      batch.update(
-        'user_eggs',
-        {'distance_accumulated_meters': egg.distanceAccumulatedMeters},
-        where: 'id = ?',
-        whereArgs: [egg.id],
+      // Part 3-B(Document/temp.md) — 이미 로컬에 있어 insert가 ignore된 알의 거리를 서버값과
+      // 병합. 단, restore가 읽는 서버 스냅샷은 최대 몇 분 지연이고 게스트 기간에 로컬로만 쌓인
+      // (아직 flush 안 된) 델타가 빠져 있어, blind overwrite하면 "게스트로 걸음 → (재)로그인"
+      // 때 파트너 알 진행도가 옛 서버값으로 되돌아가는 회귀가 있었음(2026-08-30). 그래서 여기선
+      // MAX(로컬, 서버)로만 올림 — restore는 진행도를 절대 낮추지 않는다. 회원의 서버
+      // authoritative down-correction(속도 클램프/mock 스킵으로 서버가 로컬보다 낮은 경우)은
+      // fresh 경로인 applyServerDistances(distance/sync 응답)가 그대로 담당하므로 "부화 준비
+      // 완료로 보이다 서버 부화 422" 방어는 유지됨. 방금 insert된 알은 로컬==서버라 멱등.
+      // is_partner 등 다른 로컬 필드는 안 건드림.
+      batch.rawUpdate(
+        'UPDATE user_eggs SET distance_accumulated_meters = '
+        'MAX(distance_accumulated_meters, ?) WHERE id = ?',
+        [egg.distanceAccumulatedMeters, egg.id],
       );
     }
     await batch.commit(noResult: true);

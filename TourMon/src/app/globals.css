@@ -45,10 +45,44 @@ a {
 
 /* ── 약관 / 개인정보처리방침 / 도움말 / 크레딧 (LegalDocument) ───────────── */
 
+/* 상단 고정 브랜드 헤더 — 앱에서 외부 브라우저로 바로 열려 뒤로가기 대상이 없을 때
+   인덱스(/)로 돌아가는 경로. .landing-* 팔레트(.landing 스코프 전용)는 안 쓰고 :root 토큰만.
+   body가 flex column + overflow-x:hidden이라 sticky가 애매해질 수 있어 viewport 기준 fixed로
+   고정 — 화면 밖으로 안 나감. 아래 .legal의 padding-top이 헤더 높이만큼 콘텐츠를 밀어줌. */
+.legal-topbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  height: 3.25rem;
+  display: flex;
+  align-items: center;
+  background: var(--background);
+}
+
+.legal-topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 0 1.375rem;
+  font-weight: 600;
+  font-size: 1.0625rem;
+  color: var(--foreground);
+}
+
+.legal-topbar-brand img {
+  display: block;
+}
+
 .legal {
   max-width: 680px;
   margin: 0 auto;
-  padding: 3.5rem 1.375rem 6rem;
+  /* top = 헤더 높이(3.25rem) + 여백(2rem) */
+  padding: 5.25rem 1.375rem 6rem;
   font-size: 1rem;
   line-height: 1.75;
   /* 한글 문장이 단어 중간에서 끊기지 않게 하되, 긴 URL/토큰은 줄바꿈 허용 */
@@ -126,8 +160,17 @@ a {
 }
 
 @media (max-width: 480px) {
+  .legal-topbar {
+    height: 3rem;
+  }
+
+  .legal-topbar-brand {
+    padding: 0 1.125rem;
+  }
+
   .legal {
-    padding: 2.5rem 1.125rem 4rem;
+    /* top = 헤더 높이(3rem) + 여백(1.5rem) */
+    padding: 4.5rem 1.125rem 4rem;
   }
 
   .legal h1 {

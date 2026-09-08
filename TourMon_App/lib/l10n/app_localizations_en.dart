@@ -46,6 +46,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get loginLabel => 'Log in';
 
   @override
+  String get loginComingSoonNote =>
+      'Account sign-in is coming soon. Play as a guest for now.';
+
+  @override
   String loggedInAs(String nickname) {
     return 'Logged in as $nickname.';
   }
@@ -128,7 +132,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String guestEggShelfLifeBanner(int days) {
-    return 'Until you sign in, an egg hardens and can no longer hatch $days days after you get it. Sign in to keep your eggs on your account for good.';
+    return 'An egg hardens and can no longer hatch $days days after you get it. Be sure to hatch it before then.';
   }
 
   @override
@@ -160,7 +164,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String eggInfoGuestShelfLifeNote(int days) {
-    return 'Until you sign in, this egg can only be hatched within $days days of getting it.';
+    return 'This egg must be hatched within $days days of getting it.';
   }
 
   @override
@@ -202,6 +206,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get showMoreButton => 'More';
+
+  @override
+  String get showLessButton => 'Less';
 
   @override
   String detailLoadFailedMessage(String error) {
@@ -376,6 +383,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get languageEnglishOption => 'English';
 
   @override
+  String get soundSectionTitle => 'Sound effects';
+
+  @override
   String get appNotWorkingLabel => 'App not working?';
 
   @override
@@ -537,26 +547,54 @@ class AppLocalizationsEn extends AppLocalizations {
       'Tourism info & photos: ⓒ Korea Tourism Organization (TourAPI)';
 
   @override
-  String get healthConnectConnectPrompt =>
-      'Distance isn\'t counting — connect Health Connect';
+  String get distanceBannerNeedsLocation =>
+      'Distance isn\'t counting — turn on location';
 
   @override
-  String get healthConnectNoticeDialogTitle => 'Health Connect Access';
+  String get activityPermissionBannerWithPartner =>
+      'Distance isn\'t counting — turn on activity access';
 
   @override
-  String get healthConnectNoticeBodyMessage =>
-      'Partner eggs grow based on the distance you actually walk. That distance comes from Health Connect — Android\'s shared, manufacturer-independent health data store (data recorded by other health apps like Google Fit or Samsung Health also flows into it, not just one maker\'s app). Continuing will take you to the Health Connect install screen if it\'s missing, or a permission request if it\'s already installed.';
+  String get activityPermissionBannerNoPartner =>
+      'Step tracking needs permission — turn on';
 
   @override
-  String get healthConnectDeniedPartnerCancelledMessage =>
-      'Partner assignment cancelled — Health Connect access is required, since partner eggs grow from the distance you walk.';
+  String get activityPermissionNoticeDialogTitle =>
+      'Activity recognition access';
+
+  @override
+  String get activityPermissionNoticeBodyMessage =>
+      'Partner eggs and today\'s distance grow with the distance you actually walk. While the app is open it measures distance from your location; walking while the app was closed is filled in from your device\'s step sensor. Reading that step count needs the \'Physical activity\' permission. Continuing will take you to the permission request.';
+
+  @override
+  String get activityPermissionOpenSettingsButton => 'Open settings';
+
+  @override
+  String get activityPermissionDeniedPartnerKeptMessage =>
+      'Without activity recognition access, walking while the app is closed won\'t be counted. Your partner egg is still set, and distance accrues normally while you keep the app open and walk.';
+
+  @override
+  String get backgroundDistanceToggleLabel =>
+      'Track distance while app is closed';
+
+  @override
+  String get backgroundDistanceInfoBody =>
+      'When on, distance you walk while the app is closed or in the background also counts toward hatching your partner eggs. This reads your device\'s physical activity (step) data. Even with it off, distance still accrues while the app is open. Turning it off stops the app from reading step data — to remove the permission entirely, revoke it in system Settings > Apps > Permissions.';
+
+  @override
+  String get backgroundDistancePermissionRequiredMessage =>
+      'Can\'t turn on without the physical activity permission.';
+
+  @override
+  String get backgroundDistancePermanentlyDeniedMessage =>
+      'Physical activity permission is off. Please enable it in system settings.';
 
   @override
   String get locationConsentDialogTitle => 'Location Data & Age Confirmation';
 
   @override
   String get locationConsentBodyMessage =>
-      'When you acquire an egg, TourMon uses your location in real time only to verify you\'re near the tourist spot, and does not store it. You can withdraw this consent anytime by turning off location permission in your device settings, though this will disable egg acquisition and other location-based features. See the Privacy Policy on the My Page screen for details.';
+      'TourMon uses your location to verify you\'re near a tourist spot when acquiring an egg, to measure the distance you walk, and to show your current position on the map. All of this happens entirely on your device — your GPS coordinates and route are never sent to or stored on a server. The distance measurement result (an aggregated distance value) is also kept only on your device. You can withdraw this consent anytime by turning off location permission in your device settings, in which case location-based features such as egg acquisition and distance measurement will be unavailable. See the Privacy Policy on the My Page screen for details.';
 
   @override
   String get locationConsentAgreeCheckboxLabel =>
@@ -564,4 +602,17 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get ageConsentCheckboxLabel => 'I am 14 years of age or older';
+
+  @override
+  String get welcomeGiftTitle => 'You\'ve got a gift!';
+
+  @override
+  String get welcomeGiftBody =>
+      'Welcome to TourMon. Here\'s your first egg. Set it as a partner and walk to hatch it into a monster.';
+
+  @override
+  String get welcomeGiftOpenInventoryButton => 'Open inventory';
+
+  @override
+  String get welcomeGiftDismissButton => 'Close';
 }

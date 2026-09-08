@@ -56,14 +56,21 @@ class EggApi {
 
   final AuthorizedApiClient _client;
 
+  /// [lat]/[lng]는 서버 반경 판정(`ST_DWithin`)용 — `GameConfig.serverEggProximityCheck`가 켜져
+  /// 있을 때만 전달한다. 둘 다 null이면 요청 본문에서 아예 빠지고, 서버는 반경 검사를 건너뛴다
+  /// (클라이언트가 로컬 캐시 좌표로 이미 판정했다는 전제 — `Document/temp.md` "게스트 전용 출시").
   Future<AcquiredEggResult> acquireEgg({
     required int tourismSpotId,
-    required double lat,
-    required double lng,
+    double? lat,
+    double? lng,
   }) async {
     final res = await _client.post(
       '/api/eggs/acquire',
-      body: {'tourismSpotId': tourismSpotId, 'lat': lat, 'lng': lng},
+      body: {
+        'tourismSpotId': tourismSpotId,
+        'lat': ?lat,
+        'lng': ?lng,
+      },
     );
 
     if (res.statusCode == 404) throw EggSpotNotFoundException();
@@ -74,6 +81,18 @@ class EggApi {
       throw Exception('Egg acquire request failed: ${res.statusCode}');
     }
 
+    final json = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
+    return AcquiredEggResult.fromJson(json);
+  }
+
+  /// 앱 최초 설치 시 1회성 웰컴 알(common) — 위치/스팟 없이 `egg_vouchers`만 발급받는다. 응답
+  /// shape은 [acquireEgg]와 동일(voucher.id 기반)이라 호출부는 결과를 일반 게스트 알과 똑같이
+  /// 로컬 저장한다(`welcome_egg.dart`). 서버 라우트: `POST /api/eggs/welcome`.
+  Future<AcquiredEggResult> claimWelcomeEgg() async {
+    final res = await _client.post('/api/eggs/welcome');
+    if (res.statusCode != 200) {
+      throw Exception('Welcome egg request failed: ${res.statusCode}');
+    }
     final json = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
     return AcquiredEggResult.fromJson(json);
   }

@@ -135,6 +135,8 @@ class _EggOddsOverviewDialogState extends State<_EggOddsOverviewDialog> {
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton(
+                    // 기본 강조색(주황)이 이 정보 팝업에선 경고처럼 읽혀 잉크색으로 중립화.
+                    style: TextButton.styleFrom(foregroundColor: SketchTheme.ink),
                     onPressed: () => Navigator.of(context).pop(),
                     child: Text(l10n.confirmButton),
                   ),

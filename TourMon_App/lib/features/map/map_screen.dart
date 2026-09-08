@@ -19,9 +19,13 @@ import '../../data/tourism_spot_repository.dart';
 import '../../l10n/app_localizations.dart';
 import '../consent/location_consent_dialog.dart';
 import '../debug/debug_db_viewer_screen.dart';
+import '../distance/debug_activity_permission_button.dart';
 import '../distance/debug_distance_injector_button.dart';
-import '../distance/debug_health_connect_permission_button.dart';
+import '../distance/distance_tracker_service.dart';
+import '../egg/debug_add_egg_button.dart';
 import '../egg/egg_repository.dart';
+import '../egg/welcome_egg.dart';
+import '../egg/welcome_gift_dialog.dart';
 import '../onboarding/onboarding_screen.dart';
 import 'location_permission.dart';
 import 'partner_egg_progress_box.dart';
@@ -81,17 +85,22 @@ class _MapScreenState extends State<MapScreen> {
   // 처리, onboarding_screen.dart 주석, init_plan.md, study_folder/2-4 #3).
   bool _followMode = false;
   // CurrentLocationLayer의 alignPositionOnUpdate(AlignOnUpdate.always)는 GPS 갱신마다 카메라를
-  // 위치로 재중심시키긴 하지만 줌 레벨은 그대로 둠 — MapOptions.initialZoom을 MapConfig.
-  // followModeZoom으로 맞춰놔도(2026-08-26 후속 조정) 그건 initialCenter(서울시청 부근) 기준
-  // 화면일 뿐, 실제 사용자 위치로는 안 옮겨줌. 첫 GPS 픽스 딱 한 번만 _toggleFollowMode()의 이동
-  // 로직처럼 직접 카메라를 사용자 위치로 옮겨서(_positionSub 리스너 참고) 해결 — 이후엔
-  // alignPositionOnUpdate가 그 위치를 유지한 채로 계속 따라감.
-  bool _hasAppliedInitialFollowZoom = false;
+  // 위치로 재중심시키긴 하지만, 초기 상태(initialCenter=서울시청 부근)에서는 실제 사용자 위치로
+  // 한 번 옮겨줘야 이후 추적이 그 위치를 유지한다. 팔로우가 켜진 뒤 첫 GPS 픽스 딱 한 번만
+  // _toggleFollowMode()의 이동 로직처럼 직접 카메라를 사용자 위치로 옮김(_positionSub 리스너 참고).
+  // 줌 레벨은 건드리지 않는다(2026-08-30, 사용자 요청 — FAB는 "현재 위치로 이동"만, 줌 변경 없음).
+  bool _hasCenteredOnFirstFix = false;
   bool _isSpeeding = false;
   // 인천/서울 서비스 지역 밖에 있는지 — 밖이면 팔로우 모드로 카메라를 그쪽으로 옮기지 않고(타일이
   // 없어 회색 화면만 보임, Document/temp.md 참고) 안내 메시지만 1회 띄움.
   bool _isOutOfServiceArea = false;
   DateTime? _lastPositionAt;
+
+  // GPS 주 경로 거리 적립(Document/temp.md)의 직전 기준점 — haversine 세그먼트 계산용. 픽스
+  // 타임스탬프(_lastPositionAt은 벽시계라 속도 판정 전용, 이쪽은 Position.timestamp)와 짝을
+  // 이뤄 5-b 클램프/5-c Stale Fix 방어에 쓴다.
+  LatLng? _distanceAnchor;
+  DateTime? _distanceAnchorAt;
 
   // GPS 스트림을 CurrentLocationLayer와 우리 쪽(속도 판정 + 알 획득 반경 원 표시)이 하나만 공유 —
   // defaultPositionStreamSource()는 CurrentLocationLayer가 positionStream 없이 쓸 때 내부적으로
@@ -121,9 +130,17 @@ class _MapScreenState extends State<MapScreen> {
     super.initState();
     _ensureTourismData();
     // 앱 최초 실행이면 핵심 루프 안내(마커→알→파트너→걷기→부화)를 한 번 보여줌 — 첫 프레임
-    // 직후에 띄워서 지도는 뒤에서 로딩되게 함. 이미 본 사용자는 아무 일도 안 일어남.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) showOnboardingIfNeeded(context);
+    // 직후에 띄워서 지도는 뒤에서 로딩되게 함. 이미 본 사용자는 아무 일도 안 일어남. 온보딩을 닫으면
+    // 이어서 웰컴 알을 지급하고(이 기기에서 아직 안 받았으면) "선물이 왔어요" 팝업을 띄운다 —
+    // 네트워크 실패면 조용히 넘어가고 다음 실행에 재시도(welcome_egg.dart).
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await showOnboardingIfNeeded(context);
+      if (!mounted) return;
+      final gifted = await claimWelcomeEggIfNeeded(context);
+      if (gifted != null && mounted) {
+        await showWelcomeGiftDialog(context, gifted);
+      }
     });
     // 이미 위치 동의를 마쳤고 권한도 허용돼 있으면 조용히 위치 추적 재개(OS 팝업 안 뜸). 첫 실행/
     // 미동의/권한 거부 상태면 아무것도 안 하고 FAB 탭(_startLocationTracking)을 기다린다.
@@ -181,8 +198,9 @@ class _MapScreenState extends State<MapScreen> {
       final point = LatLng(position.latitude, position.longitude);
       if (MapConfig.serviceAreaBounds.contains(point)) {
         // 구독의 첫 픽스가 리스너에서 또 이동시키지 않도록 플래그를 여기서 세움.
-        _hasAppliedInitialFollowZoom = true;
-        _mapController.move(point, MapConfig.followModeZoom);
+        _hasCenteredOnFirstFix = true;
+        // 줌은 현재 값 유지 — 현재 위치로 카메라만 옮김.
+        _mapController.move(point, _mapController.camera.zoom);
         setState(() => _followMode = true);
       } else {
         // 서비스 지역 밖 — 팔로우는 안 켜지만 구독은 유지(안으로 들어오면 리스너가 처리).
@@ -218,8 +236,10 @@ class _MapScreenState extends State<MapScreen> {
   void _teardownLocationTracking() {
     _positionSub?.cancel();
     _positionSub = null;
-    _hasAppliedInitialFollowZoom = false;
+    _hasCenteredOnFirstFix = false;
     _lastPositionAt = null;
+    _distanceAnchor = null;
+    _distanceAnchorAt = null;
     _currentPositionNotifier.value = null;
     if (mounted) {
       setState(() {
@@ -267,13 +287,13 @@ class _MapScreenState extends State<MapScreen> {
     final outOfServiceArea = !MapConfig.serviceAreaBounds.contains(
       LatLng(position.latitude, position.longitude),
     );
-    // 팔로우가 켜진 뒤 받는 첫 GPS 픽스 딱 한 번만 — FAB를 누른 것과 동일하게 현재 위치로
-    // followModeZoom까지 맞춤(위 _hasAppliedInitialFollowZoom 선언부 주석 참고).
-    if (_followMode && !outOfServiceArea && !_hasAppliedInitialFollowZoom) {
-      _hasAppliedInitialFollowZoom = true;
+    // 팔로우가 켜진 뒤 받는 첫 GPS 픽스 딱 한 번만 — 현재 위치로 카메라를 옮김(줌은 현재 값
+    // 유지, 위 _hasCenteredOnFirstFix 선언부 주석 참고).
+    if (_followMode && !outOfServiceArea && !_hasCenteredOnFirstFix) {
+      _hasCenteredOnFirstFix = true;
       _mapController.move(
         LatLng(position.latitude, position.longitude),
-        MapConfig.followModeZoom,
+        _mapController.camera.zoom,
       );
     }
     // 실제로 바뀔 때만 setState — 매 GPS 틱마다 부르면 프로덕션 빌드에도 지도 화면 전체가
@@ -290,6 +310,77 @@ class _MapScreenState extends State<MapScreen> {
       position.latitude,
       position.longitude,
     );
+
+    _accumulateGpsDistance(position);
+  }
+
+  // GPS 주 경로 거리 적립(Document/temp.md "거리 측정 이중화") — 좌표 간 이동 거리를 노이즈
+  // 필터/클램프를 거쳐 DistanceTrackerService에 넘긴다. 구독 소유권은 이 화면에 유지하고,
+  // 게임 로직(일별 히스토리/파트너 알/서버 동기화)은 서비스가 담당하는 절충안(temp.md 1번).
+  void _accumulateGpsDistance(Position position) {
+    final tracker = DistanceTrackerService.instance;
+    final point = LatLng(position.latitude, position.longitude);
+    final fixTime = position.timestamp;
+
+    // 5-c — `paused`를 거친 뒤의 첫 픽스는 거리 적립을 스킵하고 앵커만 리셋한다(그 구간은
+    // pedometer 보조 경로가 전담, 이중 집계 방지).
+    if (tracker.gpsAnchorPendingReset) {
+      final resumedAt = tracker.lastResumedAt;
+      // Stale Fix — `resumed` 이전 타임스탬프 픽스는 OS가 즉시 내보낸 낡은 캐시 좌표일 수 있음.
+      // 앵커로 삼지 않고 버린다(플래그는 유지 — 신선한 픽스가 와야 리셋).
+      if (resumedAt != null && fixTime.isBefore(resumedAt)) return;
+      _distanceAnchor = point;
+      _distanceAnchorAt = fixTime;
+      tracker.clearGpsAnchorPendingReset();
+      return;
+    }
+
+    // 차량 이동 등 속도 초과 구간은 앵커만 리셋하고 적립하지 않음 — "걸어서 부화" 규칙과
+    // 어긋나고, 속도가 정상으로 돌아올 때 큰 세그먼트가 튀는 것도 방지.
+    if (_isSpeeding) {
+      _distanceAnchor = point;
+      _distanceAnchorAt = fixTime;
+      return;
+    }
+
+    final anchor = _distanceAnchor;
+    final anchorAt = _distanceAnchorAt;
+    if (anchor == null || anchorAt == null) {
+      _distanceAnchor = point;
+      _distanceAnchorAt = fixTime;
+      return;
+    }
+
+    // 5-a — 정확도가 나쁜(값이 큰) 픽스는 제외. 앵커는 유지해 다음 정상 픽스에서 이어감.
+    if (position.accuracy > MapConfig.maxGpsAccuracyForDistanceMeters) return;
+
+    final segment = _distance.as(LengthUnit.Meter, anchor, point);
+
+    // 5-a — 정지 상태 drift: 최소 이동 거리 미만이면 무시(앵커 유지 → 실제로 이동했을 때
+    // 그 지점부터 정상 적립).
+    if (segment < MapConfig.minGpsDistanceDeltaMeters) return;
+
+    final gapSeconds = fixTime.difference(anchorAt).inSeconds;
+    // 시계 역전/동일 타임스탬프 — 클램프 근거가 없으므로 적립 없이 앵커만 갱신(temp.md 4번과 동일 결).
+    if (gapSeconds <= 0) {
+      _distanceAnchor = point;
+      _distanceAnchorAt = fixTime;
+      return;
+    }
+
+    // 5-b — 경과 시간 대비 물리적으로 가능한 거리로 클램프. 정상적인 "화면 껐다 켜고 그동안
+    // 걸음"은 상한 안에 들어와 그대로 인정되고, GPS 튐/순간이동/mock 스푸핑은 상한에서 잘림.
+    // gap은 시계/캐시 픽스 타임스탬프 조작으로 부풀릴 수 있어 절대 상한으로 캡(temp.md 4번의
+    // elapsedMinutes 절대 상한과 같은 결).
+    final cappedGapSeconds = gapSeconds < MapConfig.maxGpsDistanceGapSeconds
+        ? gapSeconds
+        : MapConfig.maxGpsDistanceGapSeconds;
+    final maxPlausible = cappedGapSeconds * MapConfig.maxWalkingSpeedMps;
+    final applied = segment < maxPlausible ? segment : maxPlausible;
+
+    _distanceAnchor = point;
+    _distanceAnchorAt = fixTime;
+    unawaited(tracker.addGpsDelta(applied, mocked: position.isMocked));
   }
 
   Future<void> _ensureTourismData() async {
@@ -412,7 +503,8 @@ class _MapScreenState extends State<MapScreen> {
     if (_positionSub != null) {
       final last = _currentPositionNotifier.value;
       if (last != null && MapConfig.serviceAreaBounds.contains(last)) {
-        _mapController.move(last, MapConfig.followModeZoom);
+        // 줌은 현재 값 유지 — 마지막 위치로 카메라만 재중심.
+        _mapController.move(last, _mapController.camera.zoom);
       }
       setState(() => _followMode = true);
       return;
@@ -453,11 +545,10 @@ class _MapScreenState extends State<MapScreen> {
               mapController: _mapController,
               options: MapOptions(
                 initialCenter: MapConfig.initialCenter,
-                // FAB를 누른 것과 동일한 줌으로 시작(2026-08-26, 사용자 요청) — 첫 GPS 픽스가 오면
-                // _positionSub 리스너가 어차피 followModeZoom으로 다시 맞추지만, 그 전까지도 초기
-                // 프레임부터 넓은 지도(예전엔 여기 zoom 13 고정값)가 잠깐 보이지 않도록 처음부터
-                // 이 값으로 시작.
-                initialZoom: MapConfig.followModeZoom,
+                // 앱 시작 시 초기 줌 — 주변 마커가 바로 잘 보이는 확대 수준으로 시작(예전엔 zoom
+                // 13 고정값이라 넓은 지도가 잠깐 보였음). FAB "현재 위치로 이동"은 줌을 바꾸지
+                // 않으므로(2026-08-30), 이후 팔로우가 켜져도 이 줌이 유지된다.
+                initialZoom: MapConfig.initialZoom,
                 minZoom: MapConfig.minZoom,
                 maxZoom: MapConfig.maxZoom,
                 // 카메라(뷰포트 전체)를 서비스 지역 밖으로 못 나가게 묶음 — 이 범위 밖은 타일이
@@ -586,7 +677,11 @@ class _MapScreenState extends State<MapScreen> {
             Positioned(
               top: topInset + 8,
               left: 8,
-              child: const PartnerEggProgressBox(),
+              // 배너에서 "위치 권한 켜기"를 누르면 이 화면의 기존 위치 플로우를 그대로 태운다
+              // (동의 다이얼로그 → OS 요청 → deniedForever 설정 안내 → 스트림 구독까지, 6-b).
+              child: PartnerEggProgressBox(
+                onRequestLocationSetup: _startLocationTracking,
+              ),
             ),
             Positioned(
               top: topInset + 8,
@@ -637,7 +732,9 @@ class _MapScreenState extends State<MapScreen> {
                     const SizedBox(height: 8),
                     const DebugDistanceInjectorButton(),
                     const SizedBox(height: 8),
-                    const DebugHealthConnectPermissionButton(),
+                    const DebugActivityPermissionButton(),
+                    const SizedBox(height: 8),
+                    const DebugAddEggButton(),
                   ],
                 ),
               ),

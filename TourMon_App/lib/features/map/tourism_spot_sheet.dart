@@ -1,9 +1,13 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../audio/sfx.dart';
+import '../../config/game_config.dart';
+import '../../config/map_config.dart';
 import '../../config/sketch/sketch_button.dart';
 import '../../config/sketch/sketch_theme.dart';
 import '../../data/tourism_spot_repository.dart';
@@ -41,6 +45,9 @@ class _TourismSpotSheetState extends State<TourismSpotSheet> {
   final _tourismSpotRepository = const TourismSpotRepository();
   final _eggRepository = const EggRepository();
   Future<TourismSpotDetail>? _detailFuture;
+  // "더보기"로 펼친 상태 — _detailFuture는 한 번 로드하면 그대로 재사용하고(접었다 펴도 재요청
+  // 안 함), 이 플래그로만 표시/숨김을 토글한다.
+  bool _detailExpanded = false;
   Future<TourismSpotMembers>? _membersFuture;
   bool _isAcquiringEgg = false;
   String? _eggResultMessage;
@@ -67,9 +74,14 @@ class _TourismSpotSheetState extends State<TourismSpotSheet> {
     ),
   );
 
-  void _loadDetail() {
+  void _toggleDetail() {
     setState(() {
-      _detailFuture = _api.fetchSpotDetail(
+      if (_detailExpanded) {
+        _detailExpanded = false;
+        return;
+      }
+      _detailExpanded = true;
+      _detailFuture ??= _api.fetchSpotDetail(
         widget.spot.id,
         locale: apiLocaleOf(context),
       );
@@ -109,11 +121,32 @@ class _TourismSpotSheetState extends State<TourismSpotSheet> {
     setState(() => _isAcquiringEgg = true);
     try {
       if (await _eggRepository.hasAcquiredToday(_cooldownSpotId)) {
+        Sfx.instance.play('egg_cooldown');
         _showMessage(l10n.alreadyAcquiredTodayMessage);
         return;
       }
 
       final position = await Geolocator.getCurrentPosition();
+
+      // 출시 임시 조치 — 반경 판정을 서버(ST_DWithin)가 아니라 여기서 로컬 캐시 좌표로 직접 함
+      // (GameConfig.serverEggProximityCheck=false, Document/temp.md "게스트 전용 출시"). 서버로
+      // 좌표가 가는 유일한 경로였어서, 이 판정을 클라로 내리고 acquire에 lat/lng를 안 실으면
+      // 서버엔 사용자 위치정보가 전혀 안 남는다. 판정 반경은 MapConfig.eggAcquisitionRadiusMeters
+      // (서버 EGG_ACQUISITION_RADIUS_METERS 미러링, "시각화 전용" 주석이었지만 이 모드에선
+      // authoritative).
+      if (!GameConfig.serverEggProximityCheck) {
+        final distanceToSpot = const Distance().as(
+          LengthUnit.Meter,
+          LatLng(position.latitude, position.longitude),
+          widget.spot.position,
+        );
+        if (distanceToSpot > MapConfig.eggAcquisitionRadiusMeters) {
+          Sfx.instance.play('egg_fail_far');
+          _showMessage(l10n.locationInvalidMessage);
+          return;
+        }
+      }
+
       // _cooldownSpotId(대표 spot)가 아니라 widget.spot.id(실제 탭한 spot) — 서버가 이 id로
       // 위치반경/카테고리(숙박·음식점·쇼핑 획득 불가) 판정을 하고, 쿨타임 정규화는 서버가 그
       // spot의 representative_spot_id를 보고 알아서 함(route.ts 주석 참고). 여기서 대표 id를
@@ -123,8 +156,8 @@ class _TourismSpotSheetState extends State<TourismSpotSheet> {
       // 발견 — 버튼은 widget.spot.contentTypeId로 정상 활성화돼 있었는데 서버 응답만 틀렸음).
       final result = await eggApi.acquireEgg(
         tourismSpotId: widget.spot.id,
-        lat: position.latitude,
-        lng: position.longitude,
+        lat: GameConfig.serverEggProximityCheck ? position.latitude : null,
+        lng: GameConfig.serverEggProximityCheck ? position.longitude : null,
       );
 
       await _eggRepository.insertEgg(
@@ -141,6 +174,7 @@ class _TourismSpotSheetState extends State<TourismSpotSheet> {
       );
 
       if (!mounted) return;
+      Sfx.instance.play('egg_get');
       _showMessage(
         l10n.eggAcquiredMessage(
           result.name,
@@ -150,12 +184,15 @@ class _TourismSpotSheetState extends State<TourismSpotSheet> {
     } on EggLocationInvalidException {
       // 판정 반경은 서버 설정값(game-config.ts의 EGG_ACQUISITION_RADIUS_METERS)에만 있음 —
       // 클라이언트에 중복 하드코딩 안 함.
+      Sfx.instance.play('egg_fail_far');
       _showMessage(l10n.locationInvalidMessage);
     } on EggSpotNotFoundException {
+      Sfx.instance.play('error_generic');
       _showMessage(l10n.spotNotFoundMessage);
     } on EggCooldownException {
       // 정상 플레이에선 위 hasAcquiredToday 프리체크가 먼저 막아서 거의 안 타는 경로 — 서버
       // 쿨타임(로그인 상태 전용)이 클라이언트 프리체크를 우회한 요청을 걸러낸 경우.
+      Sfx.instance.play('egg_cooldown');
       _showMessage(l10n.alreadyAcquiredTodayMessage);
     } on EggAcquisitionDisabledException {
       // 정상 플레이에선 버튼이 이미 비활성화돼 있어(canAcquireEgg) 거의 안 타는 경로.
@@ -167,6 +204,7 @@ class _TourismSpotSheetState extends State<TourismSpotSheet> {
       // 게이트 통과 후 권한을 회수한 드문 경우.
       _showMessage(l10n.locationPermissionDeniedMessage);
     } catch (e) {
+      Sfx.instance.play('egg_fail_network');
       _showMessage(l10n.eggAcquireFailedMessage('$e'));
     } finally {
       if (mounted) setState(() => _isAcquiringEgg = false);
@@ -187,15 +225,20 @@ class _TourismSpotSheetState extends State<TourismSpotSheet> {
     final preloaded = members.spots
         .where((s) => s.contentTypeId == contentTypeId)
         .toList();
+    Sfx.instance.play('ui_sheet_open');
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      // DuplicateSpotsSheet가 내부에서 SketchTheme으로 다시 감싸지만, 시트의 Material 배경은
+      // 이 호출부 context의 앙비언트 테마(앱 전역 다크)로 만들어지므로 종이색을 명시(map_screen.dart
+      // _onSpotTapped와 같은 이유 — 안 주면 리스트/상세가 검은 배경으로 뜸).
+      backgroundColor: SketchTheme.paper,
       builder: (context) => DuplicateSpotsSheet(
         representativeId: widget.spot.id,
         contentTypeId: contentTypeId,
         preloadedSpots: preloaded.isNotEmpty ? preloaded : null,
       ),
-    );
+    ).whenComplete(() => Sfx.instance.play('ui_sheet_close'));
   }
 
   // 상세 정보의 홈페이지 필드는 순수 텍스트(가끔 HTML 앵커 태그가 그대로 섞여 오기도 함, TourAPI
@@ -353,18 +396,20 @@ class _TourismSpotSheetState extends State<TourismSpotSheet> {
                     ),
                   ],
                   const SizedBox(height: 12),
-                  // 'More'(더보기)와 'Get egg'를 한 줄에 배치 — 더보기가 상세 로드로 바뀌어도(아래
-                  // FutureBuilder로) Get egg는 항상 이 줄의 오른쪽 끝에 고정되도록 spaceBetween 사용.
+                  // 'More'/'Less'(더보기/접기 토글)와 'Get egg'를 한 줄에 배치 — spaceBetween으로
+                  // Get egg는 항상 이 줄의 오른쪽 끝에 고정. 더보기 버튼은 상세를 펼쳐도 사라지지
+                  // 않고 '접기'로 바뀌어, 끝까지 펼친 뒤에도 다시 접을 수 있음.
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      if (_detailFuture == null)
-                        OutlinedButton(
-                          onPressed: _loadDetail,
-                          child: Text(l10n.showMoreButton),
-                        )
-                      else
-                        const SizedBox.shrink(),
+                      OutlinedButton(
+                        onPressed: _toggleDetail,
+                        child: Text(
+                          _detailExpanded
+                              ? l10n.showLessButton
+                              : l10n.showMoreButton,
+                        ),
+                      ),
                       SketchButton(
                         onPressed:
                             (!canAcquireEgg(spot.contentTypeId) ||
@@ -424,7 +469,7 @@ class _TourismSpotSheetState extends State<TourismSpotSheet> {
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   ],
-                  if (_detailFuture != null) ...[
+                  if (_detailExpanded && _detailFuture != null) ...[
                     const SizedBox(height: 12),
                     FutureBuilder<TourismSpotDetail>(
                       future: _detailFuture,
@@ -586,9 +631,8 @@ class CategoryIconTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
         decoration: BoxDecoration(
           // 2026-08-26, 사용자 요청 — 자동 생성 색(surfaceContainerHighest)이 크림 배경과 잘
-          // 안 어울려서 SketchTheme의 종이 톤으로 고정. duplicate_spots_sheet.dart는 아직
-          // SketchTheme을 안 입혀서 이 타일만 튀어 보일 수 있음(다음에 그 화면도 입히면 자연히
-          // 해결됨).
+          // 안 어울려서 SketchTheme의 종이 톤으로 고정. 재사용처인 duplicate_spots_sheet.dart도
+          // 이제 SketchTheme을 입혀서(2026-08-31) 두 화면에서 같은 톤으로 보임.
           color: SketchTheme.paperDark,
           borderRadius: BorderRadius.circular(12),
         ),

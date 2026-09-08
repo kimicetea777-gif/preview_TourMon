@@ -8,7 +8,15 @@ const _consentVersionKey = 'location_consent_version';
 /// 고지 문구가 바뀌면 이 값을 올려서 저장된 버전과 달라지게 함 — [ensureLocationConsent]가 그
 /// 차이를 보고 재동의를 다시 요구함(이용약관/개인정보처리방침 쪽 AS `TermService` 재동의와 동일한
 /// 감각, Document/temp.md §3/§4 참고).
-const _currentConsentVersion = '1';
+///
+/// v2(2026-08-30) — 거리 측정 이중화(Document/temp.md)로 위치정보 이용 목적에 "걸은 거리 측정"이
+/// 추가되고 "집계 거리 값은 저장"으로 바뀌어 [locationConsentBodyMessage] 고지 문구가 실질
+/// 변경됨. 기존 동의자도 다시 동의를 받도록 버전 상향.
+///
+/// v3(2026-08-31) — 게스트 전용 출시(Document/temp.md "게스트 전용 출시")로 위치정보가 서버로
+/// 전송되지 않고 전적으로 기기 내에서만 처리됨. [locationConsentBodyMessage]를 "서버 전송·저장
+/// 없음, 기기 내 처리"로 고쳐 개인정보처리방침 제2조와 일치시킴. 실질 변경이라 버전 상향.
+const _currentConsentVersion = '3';
 
 /// 위치정보 수집·이용 동의 + 만 14세 이상 확인을 게이트하는 진입점.
 ///

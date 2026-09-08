@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map_tile_caching/flutter_map_tile_caching.dart';
 import 'package:provider/provider.dart';
 
+import 'audio/sfx.dart';
 import 'config/app_info.dart';
 import 'config/app_theme.dart';
+import 'config/game_config.dart';
 import 'config/map_config.dart';
 import 'features/auth/auth_session.dart';
 import 'features/distance/distance_tracker_service.dart';
@@ -25,14 +27,16 @@ Future<void> main() async {
   // 최소 지원 빌드 게이트가 비교할 설치 빌드 번호를 먼저 읽어둠(RemoteConfigService/AppGate 참고).
   await AppInfo.init();
 
+  // 효과음 프리로드 + 오디오 세션 설정(Document/sound_effect_plan.md). 실패해도 무음으로 계속.
+  unawaited(Sfx.instance.init());
+
   final authSession = AuthSession();
 
-  // 4단계 — 앱 실행 내내 Health Connect 거리를 수집해 파트너 알에 적립(Health Connect 전환,
-  // Document/temp.md "통합 결정"). requestPermissionIfNeeded: false — 권한이 이미 있는 재방문
-  // 유저만 조용히 재개되고, 아직 한 번도 파트너 알을 설정 안 한(=권한 요청 전) 신규 유저는 지도도
-  // 보기 전에 건강 데이터 동의 다이얼로그가 뜨지 않음(temp.md 미결 사항 "just-in-time" 결정) —
-  // 실제 권한 요청은 파트너 알을 처음 지정하는 시점에 EggInventoryScreen이 트리거함.
-  // 6단계 Phase 5 — authSession을 넘겨서 로그인 상태면 거리를 서버에도 주기적으로 동기화.
+  // 거리 측정 이중화(Document/temp.md) — GPS 주 경로는 지도 화면 위치 스트림이 구동하고, 여기선
+  // pedometer 보조 경로 구독 + 서버 flush 타이머를 시작. requestPermissionIfNeeded: false —
+  // ACTIVITY_RECOGNITION 권한이 이미 있는 재방문 유저만 조용히 재개되고, 신규 유저는 지도도 보기
+  // 전에 권한 팝업이 뜨지 않음(JIT). 실제 권한 요청은 파트너 알을 처음 지정하는 시점에
+  // EggInventoryScreen이 트리거함. authSession을 넘겨서 로그인 상태면 델타를 서버에도 동기화.
   unawaited(
     DistanceTrackerService.instance.start(
       authSession,
@@ -42,7 +46,13 @@ Future<void> main() async {
 
   // 6단계 Phase 2 — 저장된 refresh token이 있으면 조용히 재로그인. 실패해도(만료/폐기)
   // AuthSession이 자체적으로 게스트 상태로 되돌리므로 여기서 별도 에러 처리 불필요.
-  unawaited(authSession.tryRestoreSession());
+  // 게스트 전용 출시(GameConfig.accountsEnabled=false, Document/temp.md)에서는 이 조용한 재로그인도
+  // 건너뛴다 — 새 설치엔 저장된 토큰이 없어 어차피 no-op이지만, 출시 전 테스트로 로그인했던 기기가
+  // 로그인 상태로 남아 게스트 전용 전제(서버에 사용자 위치정보 미기록)를 깨는 걸 막기 위함. 저장된
+  // refresh token은 secure storage에 그대로 두고, 나중에 계정 재활성화 시 다시 복구됨.
+  if (GameConfig.accountsEnabled) {
+    unawaited(authSession.tryRestoreSession());
+  }
 
   // 원격 공지 + 최소 지원 빌드 게이트 — 캐시된 값을 즉시 반영하고 CDN에서 갱신 시도(fire-and-forget).
   // 백엔드가 아니라 tourmon-asset-cdn 워커가 서빙하므로 서버가 죽어도 공지는 뜸(Document/worker_manual.md).
@@ -72,18 +82,11 @@ class TourMonApp extends StatefulWidget {
   State<TourMonApp> createState() => _TourMonAppState();
 }
 
-/// 6단계 Phase 5 — 앱이 백그라운드로 전환되는 순간 거리를 즉시 1회 서버에 동기화하기 위해
-/// WidgetsBindingObserver로 앱 생명주기를 관찰(init_plan.md 4-3: "백그라운드 전환 시 즉시 1회
-/// 동기화"). 앱 전체에서 딱 한 번만 있으면 되는 관찰이라 루트 위젯에 둠.
-///
-/// `resumed`(포그라운드 복귀)에도 동기화(실기기 확인, 2026-08-27). Health Connect는 STEPS를 앱이
-/// 포그라운드일 때만 읽게 하고, 백그라운드 읽기 권한(`READ_HEALTH_DATA_IN_BACKGROUND`)은 심사
-/// 리스크 때문에 요청하지 않기로 정했다(2026-08-29, `Document/study_folder/4-1_Health Connect
-/// 전환.md`). 그래서 `paused` 동기화는 어느 기기에서든 STEPS 읽기가 RemoteException으로 실패할 수
-/// 있는 best-effort고(syncNow의 catch가 삼킴), 실제 따라잡기는 `resumed` 때 이뤄진다 — syncNow가
-/// [마지막 반영 시각, now) 하루 전체를 재조회하므로 그사이 쌓인 걸음수를 유실 없이 반영한다
-/// (self-healing). `paused`를 그대로 두는 이유는 로그인 유저의 미전송 델타(pending_server_sync)를
-/// 백그라운드 직전에 한 번 더 flush하려는 시도라도 남겨두는 편이 낫고, 실패해도 무해하기 때문.
+/// 거리 측정 이중화(Document/temp.md) — 앱 생명주기 전환을 관찰해 pedometer 보조 경로의
+/// baseline/diff를 처리한다. `paused`에서 그 순간의 누적 걸음수를 baseline으로 persist하고(+ GPS
+/// 앵커 리셋 플래그를 세움, 5-c), `resumed`에서 그 사이 늘어난 걸음을 거리로 환산해 "앱이 꺼져있던
+/// 동안의 이동"으로 적립한다. 양쪽 모두에서 미전송 델타를 서버로 flush도 시도(실패해도 무해).
+/// 앱 전체에서 딱 한 번만 있으면 되는 관찰이라 루트 위젯에 둔다.
 class _TourMonAppState extends State<TourMonApp> with WidgetsBindingObserver {
   @override
   void initState() {
@@ -100,9 +103,11 @@ class _TourMonAppState extends State<TourMonApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.resumed) {
-      unawaited(DistanceTrackerService.instance.syncNow());
+    final tracker = DistanceTrackerService.instance;
+    if (state == AppLifecycleState.paused) {
+      unawaited(tracker.onAppPaused());
+    } else if (state == AppLifecycleState.resumed) {
+      unawaited(tracker.onAppResumed());
     }
   }
 

@@ -45,9 +45,10 @@ class MapConfig {
   /// 결과도 커지는 문제가 있음(Document/temp.md 참고, 계산상 예상값은 z9였음)
   static const double minZoom = 13;
 
-  /// 초기 지도 중심 — 서울시청 부근. 첫 GPS 픽스 전까지만 잠깐 보이는 폴백값(초기 줌은
-  /// [followModeZoom] 그대로 씀, map_screen.dart MapOptions.initialZoom 참고).
-  static const LatLng initialCenter = LatLng(37.5665, 126.9780);
+  /// 초기 지도 중심 — 경복궁(관광지 마커 밀집 지역, 테스트용). 첫 GPS 픽스 전까지만 잠깐 보이는
+  /// 폴백값(초기 줌은 [initialZoom] 참고, map_screen.dart MapOptions.initialZoom).
+  /// 원래 서울시청 부근(37.5665, 126.9780)이었음.
+  static const LatLng initialCenter = LatLng(37.576031, 126.976722);
 
   /// FMTC(flutter_map_tile_caching) 로컬 캐시 스토어 이름
   static const String tileCacheStoreName = 'seoul_incheon';
@@ -61,11 +62,11 @@ class MapConfig {
   /// 초당 최대 5회 갱신(잠정값, 실측 후 조정).
   static const Duration tileUpdateThrottle = Duration(milliseconds: 200);
 
-  /// FAB로 "현재 위치로 이동"(팔로우 모드 켜기) 실행 시 맞추는 줌 레벨 — 도착 직후 바로 주변
-  /// 마커가 잘 보이는 확대 수준(2026-08-26, 사용자 요청으로 17→18. maxZoom(18)과 같은 값이라
-  /// 더 깊이는 못 감). 앱 실행 시 초기 줌으로도 그대로 씀(map_screen.dart MapOptions.initialZoom
-  /// 참고 — FAB를 누른 것과 같은 화면으로 시작하도록).
-  static const double followModeZoom = 18;
+  /// 앱 실행 시 지도의 초기 줌 레벨(map_screen.dart MapOptions.initialZoom) — 주변 마커가 바로
+  /// 잘 보이는 확대 수준(2026-08-26, 사용자 요청으로 17→18. maxZoom(18)과 같은 값이라 더 깊이는
+  /// 못 감). FAB "현재 위치로 이동"은 줌을 바꾸지 않고 카메라만 옮기므로(2026-08-30, 사용자 요청),
+  /// 팔로우 모드가 별도의 고정 줌을 강제하지 않는다 — 사용자가 맞춰둔 줌이 그대로 유지됨.
+  static const double initialZoom = 18;
 
   /// 알 획득 판정 반경(미터) — 지도 화면에서 모든 사용자에게 원으로 시각화(2026-08-26, 사용자
   /// 요청). 서버 EGG_ACQUISITION_RADIUS_METERS(TourMon/src/lib/game-config.ts)와 반드시 같은
@@ -84,6 +85,25 @@ class MapConfig {
   /// 재획득한 첫 픽스의 `Position.speed`를 실제 이동과 무관하게 크게 보고하는 경우가 있어, 그
   /// 한 번의 픽스만으로 "속도 초과" 오탐(잘못된 "너무 빨라서..." 알림)이 뜨는 걸 막기 위함.
   static const Duration maxGpsFixGapForSpeedCheck = Duration(seconds: 10);
+
+  /// GPS 주 경로 거리 적립의 정지 drift 필터(Document/temp.md 5-a) — 픽스 간 이동이 이 값
+  /// 미만이면 거리 적립에서 무시(GPS 미세 흔들림이 정지 상태에서도 계속 쌓이는 것 방지). 앵커는
+  /// 갱신하지 않고 그대로 둬서 이후 실제로 이동했을 때 정상 적립됨. 실기기 실측으로 5~8m
+  /// 범위에서 튜닝 예정(잠정값, `4-2` 문서 교훈: 공식 문서보다 실측 우선).
+  static const double minGpsDistanceDeltaMeters = 5;
+
+  /// 이 정확도(m)보다 나쁜(값이 큰) `Position.accuracy` 픽스는 GPS 거리 적립에서 제외
+  /// (Document/temp.md 5-a) — 실내/터널 등에서 오차가 큰 픽스가 순간이동을 만드는 것 방지.
+  /// 실기기 실측으로 튜닝 예정(잠정값).
+  static const double maxGpsAccuracyForDistanceMeters = 30;
+
+  /// 5-b 순간이동 클램프(Document/temp.md 5-b)의 경과 시간 상한(초) — 픽스 간 gap이 아무리 커도
+  /// 이 값으로 캡한 뒤 `gap × maxWalkingSpeedMps`로 클램프한다. 시스템 시계/캐시 픽스
+  /// 타임스탬프를 앞으로 조작해 gap을 부풀리면 클램프 자체가 무력화되므로(temp.md 4번의
+  /// `elapsedMinutes` 절대 상한과 같은 결), 한 번의 gap으로 인정되는 최대 거리를
+  /// `이 값 × maxWalkingSpeedMps`(= 3분 × 4m/s ≈ 720m)로 제한. 화면 켠 채 신호만 끊긴 긴
+  /// 구간은 그 이상 손해를 보지만 드물고 감수 범위.
+  static const int maxGpsDistanceGapSeconds = 180;
 
   /// 서울+인천 서비스 지역 — 실제 배경 지도(PMTiles) 커버 범위와 반드시 같은 값으로 유지할 것
   /// (TourMon/scripts/map-pipeline/config.ts의 BBOX 미러링). 이 범위 밖에서는 타일이 없어 회색

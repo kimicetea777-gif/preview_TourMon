@@ -27,4 +27,9 @@ class AppSettingsRepository {
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
+
+  Future<void> deleteValue(String key) async {
+    final db = await AppDatabase.instance.database;
+    await db.delete('app_settings', where: 'key = ?', whereArgs: [key]);
+  }
 }

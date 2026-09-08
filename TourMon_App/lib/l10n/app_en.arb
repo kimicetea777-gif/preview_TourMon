@@ -11,6 +11,7 @@
   "nicknameSaveError": "Failed to save nickname: {error}",
   "accountLabel": "Account",
   "loginLabel": "Log in",
+  "loginComingSoonNote": "Account sign-in is coming soon. Play as a guest for now.",
   "loggedInAs": "Logged in as {nickname}.",
   "accountFetchError": "Couldn't load account info. Please check your network connection.",
   "logoutButton": "Log out",
@@ -36,14 +37,14 @@
   "eggOddsOverviewButtonTooltip": "Odds by egg grade",
   "eggOddsOverviewTitle": "Monster odds by egg grade",
 
-  "guestEggShelfLifeBanner": "Until you sign in, an egg hardens and can no longer hatch {days} days after you get it. Sign in to keep your eggs on your account for good.",
+  "guestEggShelfLifeBanner": "An egg hardens and can no longer hatch {days} days after you get it. Be sure to hatch it before then.",
   "guestEggExpiresInDays": "{days, plural, =1{Hardens in 1 day} other{Hardens in {days} days}}",
   "guestEggExpiresTodayLabel": "Hardens after today",
   "guestEggExpiredLabel": "Hardened — can't hatch",
   "guestEggExpiredHatchAttemptMessage": "This egg seems to have already hardened. Removed it from your storage.",
   "discardExpiredEggButton": "Clear",
   "guestEggDiscardedMessage": "Cleared the hardened egg.",
-  "eggInfoGuestShelfLifeNote": "Until you sign in, this egg can only be hatched within {days} days of getting it.",
+  "eggInfoGuestShelfLifeNote": "This egg must be hatched within {days} days of getting it.",
 
   "confirmButton": "Confirm",
 
@@ -58,6 +59,7 @@
   "acquireEggDisabledButton": "Egg Unavailable",
   "eggAcquisitionDisabledMessage": "Lodging, restaurants, and shops don't offer eggs.",
   "showMoreButton": "More",
+  "showLessButton": "Less",
   "detailLoadFailedMessage": "Couldn't load details: {error}",
   "noEnglishTranslationLabel": "English description: No English translation available",
 
@@ -117,6 +119,8 @@
   "languageKoreanOption": "Korean",
   "languageEnglishOption": "English",
 
+  "soundSectionTitle": "Sound effects",
+
   "appNotWorkingLabel": "App not working?",
 
   "tourismResyncTitle": "Resync tourist spot data",
@@ -172,13 +176,25 @@
 
   "tourApiAttribution": "Tourism info & photos: ⓒ Korea Tourism Organization (TourAPI)",
 
-  "healthConnectConnectPrompt": "Distance isn't counting — connect Health Connect",
-  "healthConnectNoticeDialogTitle": "Health Connect Access",
-  "healthConnectNoticeBodyMessage": "Partner eggs grow based on the distance you actually walk. That distance comes from Health Connect — Android's shared, manufacturer-independent health data store (data recorded by other health apps like Google Fit or Samsung Health also flows into it, not just one maker's app). Continuing will take you to the Health Connect install screen if it's missing, or a permission request if it's already installed.",
-  "healthConnectDeniedPartnerCancelledMessage": "Partner assignment cancelled — Health Connect access is required, since partner eggs grow from the distance you walk.",
+  "distanceBannerNeedsLocation": "Distance isn't counting — turn on location",
+  "activityPermissionBannerWithPartner": "Distance isn't counting — turn on activity access",
+  "activityPermissionBannerNoPartner": "Step tracking needs permission — turn on",
+  "activityPermissionNoticeDialogTitle": "Activity recognition access",
+  "activityPermissionNoticeBodyMessage": "Partner eggs and today's distance grow with the distance you actually walk. While the app is open it measures distance from your location; walking while the app was closed is filled in from your device's step sensor. Reading that step count needs the 'Physical activity' permission. Continuing will take you to the permission request.",
+  "activityPermissionOpenSettingsButton": "Open settings",
+  "activityPermissionDeniedPartnerKeptMessage": "Without activity recognition access, walking while the app is closed won't be counted. Your partner egg is still set, and distance accrues normally while you keep the app open and walk.",
+  "backgroundDistanceToggleLabel": "Track distance while app is closed",
+  "backgroundDistanceInfoBody": "When on, distance you walk while the app is closed or in the background also counts toward hatching your partner eggs. This reads your device's physical activity (step) data. Even with it off, distance still accrues while the app is open. Turning it off stops the app from reading step data — to remove the permission entirely, revoke it in system Settings > Apps > Permissions.",
+  "backgroundDistancePermissionRequiredMessage": "Can't turn on without the physical activity permission.",
+  "backgroundDistancePermanentlyDeniedMessage": "Physical activity permission is off. Please enable it in system settings.",
 
   "locationConsentDialogTitle": "Location Data & Age Confirmation",
-  "locationConsentBodyMessage": "When you acquire an egg, TourMon uses your location in real time only to verify you're near the tourist spot, and does not store it. You can withdraw this consent anytime by turning off location permission in your device settings, though this will disable egg acquisition and other location-based features. See the Privacy Policy on the My Page screen for details.",
+  "locationConsentBodyMessage": "TourMon uses your location to verify you're near a tourist spot when acquiring an egg, to measure the distance you walk, and to show your current position on the map. All of this happens entirely on your device — your GPS coordinates and route are never sent to or stored on a server. The distance measurement result (an aggregated distance value) is also kept only on your device. You can withdraw this consent anytime by turning off location permission in your device settings, in which case location-based features such as egg acquisition and distance measurement will be unavailable. See the Privacy Policy on the My Page screen for details.",
   "locationConsentAgreeCheckboxLabel": "I agree to the collection and use of location data",
-  "ageConsentCheckboxLabel": "I am 14 years of age or older"
+  "ageConsentCheckboxLabel": "I am 14 years of age or older",
+
+  "welcomeGiftTitle": "You've got a gift!",
+  "welcomeGiftBody": "Welcome to TourMon. Here's your first egg. Set it as a partner and walk to hatch it into a monster.",
+  "welcomeGiftOpenInventoryButton": "Open inventory",
+  "welcomeGiftDismissButton": "Close"
 }

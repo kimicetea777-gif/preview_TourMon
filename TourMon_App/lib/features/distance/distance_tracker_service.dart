@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:io';
 
-import 'package:geolocator/geolocator.dart';
-import 'package:health/health.dart';
+import 'package:pedometer/pedometer.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../config/game_config.dart';
 import '../../data/app_settings_repository.dart';
@@ -14,314 +14,383 @@ import '../auth/authorized_api_client.dart';
 import '../egg/egg_repository.dart';
 import 'distance_sync_api.dart';
 
-/// Health Connect 전환(Document/temp.md "통합 결정") — 4단계 걸음수 측정 → 파트너 알 누적을
-/// 대체. `pedometer`의 raw 센서 스트림 대신, 앱이 완전히 꺼져 있어도 OS가 상시 기록해두는
-/// Health Connect 레코드를 이 서비스의 주기 타이머(GameConfig.distanceServerSyncInterval)마다
-/// 적립한다.
+/// 거리 측정 이중화(Document/temp.md "거리 측정 이중화 — GPS 포그라운드 추적을 주 경로로,
+/// pedometer를 보조 경로로") — 삼성 헬스↔Health Connect 동기화가 자주 끊기는 문제를 계기로
+/// Health Connect/삼성 헬스를 아예 걷어내고 두 경로로 거리를 적립한다.
 ///
-/// **"하루 누적 스냅샷" 방식(2026-08-27 전환)** — 매 동기화마다 오늘 하루 전체를 다시 조회해
-/// "오늘 총량"을 구하고, 지금까지 반영해둔 baseline(`_todayAppliedMetersKey`)과의 차이만 적립한 뒤
-/// baseline을 오늘 총량으로 갱신한다. 실기기 확인 결과 삼성 헬스는 STEPS를 잘게 나눠 쓰지 않고
-/// 하루 전체(자정~23:59)를 스팬으로 하는 레코드 하나를 계속 upsert하는 방식이라, 예전처럼
-/// `[마지막 동기화 시각, now)` 좁은 창으로만 조회하면 그 레코드를 거의 못 잡고(창이 짧을수록
-/// 특히) 커서가 계속 전진해버려 놓친 구간이 영영 복구가 안 되는 문제가 있었음(`daily_distance`/
-/// `pending_server_sync_delta_meters`가 몇 주째 전혀 안 쌓이는 걸로 발견).
+/// **주 경로 = GPS 포그라운드 거리 측정.** 앱이 포그라운드인 동안(다른 화면에 있어도 프로세스가
+/// 살아있으면 포함 — 실측 확인, temp.md 1번) `map_screen`이 소유한 연속 GPS 위치 스트림이 좌표
+/// 간 이동 거리(haversine)를 계산해 [addGpsDelta]로 이 서비스에 넘긴다. 노이즈 필터(정지 drift,
+/// 정확도, 순간이동 클램프)와 mock-location 감지는 `map_screen._onPositionFix`에서 처리하고,
+/// 이 서비스는 게임 로직(일별 히스토리/파트너 알/서버 동기화)만 담당한다.
 ///
-/// 매번 하루 전체를 재조회하는 방식으로 바꿨어도 **조회 시작 시각을 리셋 경계(새벽 4시)로 잡으면
-/// 여전히 실패한다** — 실측 확인(2026-08-27, `readRecords` 실제 로그로 재현): Health Connect는
-/// **레코드 자체의 시작 시각이 조회 구간 시작 시각보다 이르면 그 레코드를 통째로 안 돌려줌**
-/// (부분 겹침만으론 안 잡힘). 삼성 헬스 레코드는 자정(리셋 경계보다 4시간 이름)부터 시작하므로,
-/// 조회를 리셋 경계부터로 좁히면 항상 통째로 누락됨. 그래서 [_safeQueryStart]로 자정보다 살짝
-/// (30분) 더 여유 있게 조회 시작 시각을 앞당기고, 결과는 [splitByResetDay]로 게임 날짜별로 정확히
-/// 재배분한다(`_queryStepsByDay`). 여유를 하루치로 크게 두면 전날(이미 처리된 날짜) 레코드까지
-/// 다시 잡혀 이중 집계되는 버그가 있었어서(2026-08-27 발견, `_safeQueryStart` 문서 참고) 자정
-/// 바로 앞 30분으로만 제한. 이 방식은 Health Connect가 데이터를 언제/어떻게 쓰든(하루 1개로
-/// 몰아쓰든, 뒤늦게 upsert하든) 다음 동기화 때 다시 전체를 읽어 diff를 내므로 구조적으로 유실이
-/// 불가능해짐(self-healing). 날짜가 바뀐 시점(닫힌 지난 날짜)에 한해서만 델타 그대로 한 번
-/// 캐치업 — 이미 닫힌 날짜는 더 이상 upsert가 안 되므로 델타 합산 방식이어도 안전함.
+/// **보조 경로 = pedometer(`TYPE_STEP_COUNTER`).** 앱이 백그라운드로 전환되는 시점([onAppPaused])
+/// 에 그 순간의 누적 걸음수를 baseline으로 persist하고, 포그라운드로 복귀하면([onAppResumed])
+/// 그 사이 늘어난 걸음(diff)을 거리로 환산해 "앱이 꺼져있던 동안의 이동"으로 적립한다. GPS는
+/// 이 구간 동안 애초에 안 돌고 있었으므로(temp.md 1번에서 확인한 경계와 정확히 일치) 겹칠 여지가
+/// 구조적으로 없다.
 ///
-/// `DISTANCE_DELTA` 대신 `STEPS`를 조회함 — 삼성 헬스가 Health Connect에 STEPS만 동기화하고
-/// DISTANCE_DELTA는 안 써서(실기기 확인, 2026-08-26) DISTANCE_DELTA 기준으로는 삼성 헬스
-/// 사용자의 거리 적립이 아예 안 되는 문제가 있었음. STEPS를 GameConfig.stepsToMetersFactor로
-/// 직접 환산해 거리로 저장/표시하되, 저장 계층(daily_distance_repository 등)은 그대로 "거리"
-/// 단위를 유지 — 환산은 이 서비스 안에서만 일어남.
+/// - `TYPE_STEP_COUNTER`는 동기식 getter가 없어(`pedometer` 패키지도 `Stream<StepCount>`),
+///   포그라운드인 동안 상시 구독해 최신값을 [_lastKnownStepCount]에 캐싱해두고, `paused`에선
+///   새로 묻지 않고 캐싱된 값을 그대로 persist만 한다(temp.md 2번).
+/// - baseline은 Dart 메모리가 아니라 [AppSettingsRepository]에 즉시 persist — 안드로이드가
+///   백그라운드 프로세스를 메모리 회수로 죽이면 다음 실행이 cold start가 되므로, [start]에서도
+///   저장된 baseline이 있으면 첫 스텝 이벤트 때 diff를 반영한다(self-healing).
+/// - 재부팅으로 카운터가 0으로 리셋되면(현재값 < baseline) 그 구간은 diff 계산 불가라 적립을
+///   스킵한다(temp.md 3번).
+/// - `paused`↔`resumed` 구간은 GPS/mock 감지가 전혀 안 도는 사각지대라, 거리가 아니라 카덴스
+///   (분당 걸음 수, [GameConfig.maxPlausibleStepsPerMinute]) 기준으로 diff 자체를 클램프하고,
+///   시계 역전/경과시간 절대 상한 가드도 둔다(temp.md 4번).
 ///
-/// mock-location 감지(temp.md "중요한 역설" — 거리 방식은 흔들개보다 진입장벽 낮은 GPS 스푸핑에
-/// 취약해지므로 필수 구성요소로 격상됨) — 백그라운드("항상 허용") 위치 권한은 온보딩 마찰 이유로
-/// 배제 확정이라, 이 서비스의 동기화 주기마다 `Geolocator.getCurrentPosition()`을 1회 호출해
-/// `Position.isMocked`(Android)를 확인하는 방식으로 구현(지도 화면이 열려있지 않아도 앱이
-/// 포그라운드인 동안은 감지됨 — 이 한계는 temp.md가 이미 받아들인 전제와 일치).
-///
-/// 6단계 Phase 5 — 로그인 상태면 로컬 누적과 별개로 서버에도 델타를 동기화(init_plan.md 4-3
-/// "걸음수 서버 동기화"). 로컬 sqlite는 그대로 진행도 표시의 기준으로 남고(변경 없음), 서버는
-/// 주기적으로 델타만 받아 자기 사본에 누적 — 목표 거리 달성 판정(부화 승인)의 근거가 됨.
+/// 로그인 상태면 로컬 누적과 별개로 서버에도 델타를 주기적으로 동기화(init_plan.md 4-3). 로컬
+/// sqlite는 그대로 진행도 표시의 기준으로 남고, 서버는 델타만 받아 자기 사본에 누적 — 목표 거리
+/// 달성 판정(부화 승인)의 근거가 된다.
 class DistanceTrackerService {
   DistanceTrackerService._();
   static final DistanceTrackerService instance = DistanceTrackerService._();
 
-  // 더 이상 조회 커서로는 안 쓰지만(하루 누적 스냅샷 방식 전환), 디버그 뷰어에서 "마지막으로
-  // 동기화 시도한 시각" 진단용으로는 계속 갱신.
+  // UI가 "N분 전 갱신" 상대 시각을 보여주는 기준 — 거리 수치가 실시간이 아니라(서버 flush는
+  // 주기적) 일정 주기로만 서버에 반영된다는 걸 알리는 용도. 아직 한 번도 없으면 null.
   static const _lastSyncedAtKey = 'distance_last_synced_at';
-  // 오늘 몫 중 이미 daily_distance/파트너알/pending-server-sync에 반영 완료한 누적 미터(baseline).
-  // 오늘 총량과의 차이(diff)만 다음 적립에 쓰기 위한 기준점 — [today_distance_applied_day_key]와
-  // 항상 같이 갱신됨.
-  static const _todayAppliedMetersKey = 'today_distance_applied_meters';
-  // 위 baseline이 어느 게임 날짜([resetDayKey]) 것인지 — 날짜가 바뀌면 지난 날짜를 한 번 캐치업하고
-  // baseline을 0으로 리셋.
-  static const _todayAppliedDayKeyKey = 'today_distance_applied_day_key';
-  // 서버로 아직 못 보낸 델타 누적치(meters) — 동기화 성공 시에만 0으로 리셋하고, 실패하면 그대로
+  // 서버로 아직 못 보낸 델타 누적치(meters) — flush 성공 시에만 0으로 리셋하고, 실패하면 그대로
   // 둬서 다음 시도 때 따라잡힘. mock-location 플래그도 같이 들고 있다가 다음 서버 호출 때 함께
-  // 실어보냄 — 그래야 거리가 0인 구간에서 mock만 감지된 경우도 서버 감사 로그에 남길 수 있음.
+  // 실어보냄 — 거리가 0인 구간에서 mock만 감지된 경우도 서버 감사 로그에 남길 수 있게.
   static const _pendingServerSyncDeltaKey = 'pending_server_sync_delta_meters';
   static const _pendingMockDetectedKey = 'pending_server_sync_mock_detected';
+  // 보조 경로(pedometer) — `paused` 시점의 누적 걸음수와 그 시각(ISO8601). `resumed`/cold start
+  // 때 새 누적치와의 diff를 계산하고 나면 지운다.
+  static const _pedometerBaselineKey = 'pedometer_background_baseline';
+  static const _pedometerBaselineAtKey = 'pedometer_background_baseline_at';
+  // 사용자가 알 보관함의 "앱이 꺼져 있어도 거리 측정" 토글을 켰는지(기본 false, opt-in). ON일 때만
+  // pedometer 보조 경로를 구독한다. OFF는 앱 레벨 스위치일 뿐 — 안드로이드는 앱이 자기 런타임
+  // 권한을 회수할 수 없으므로 OS 권한은 그대로 남지만 앱이 더는 걸음 스트림을 읽지 않는다.
+  static const _bgDistanceEnabledKey = 'bg_distance_enabled';
 
   final _settings = const AppSettingsRepository();
   final _eggRepository = const EggRepository();
   final _dailyDistanceRepository = const DailyDistanceRepository();
-  final _health = Health();
 
   AuthSession? _authSession;
-  Timer? _syncTimer;
+  Timer? _serverFlushTimer;
   bool _starting = false;
-  bool _syncing = false;
+  bool _flushing = false;
+  bool _serverBusy = false;
 
-  /// [requestPermissionIfNeeded]가 false면 이미 권한이 있을 때만 조용히 시작하고, 없으면 OS
-  /// 권한 다이얼로그/Health Connect 설치 유도 없이 그냥 대기(호출한 쪽에서 나중에 다시 [start]를
-  /// 부르면 그때 재확인). 앱 실행 직후(main.dart)는 항상 false로 호출 — "게스트/회원 동일하게
-  /// 파트너 알을 처음 설정하는 시점에 요청, 앱 실행 시점엔 요청 안 함"(Document/temp.md 미결 사항
-  /// 결정, 지도도 보기 전에 건강 데이터 동의부터 뜨면 이탈 위험이 크다는 판단). 파트너 알을 처음
-  /// 지정하는 순간(`EggInventoryScreen._onPartnerToggled`)엔 true로 호출해 그때 실제로 요청.
+  // 보조 경로 상태.
+  StreamSubscription<StepCount>? _pedometerSub;
+  int? _lastKnownStepCount;
+  bool _pendingResumedDiffCheck = false;
+
+  // 정수 미터 단위로만 적립하는 파트너/서버 경로에서 소수부가 매번 버려지지 않도록 들고 있는
+  // 잔여 누적치(메모리). cold start 시 유실되지만 최대 1m 미만이라 감수(daily_distance엔 소수
+  // 그대로 적립됨).
+  double _unappliedMeters = 0;
+
+  // 5-c(temp.md) — `paused`가 한 번이라도 발생한 뒤의 첫 GPS 픽스는 거리 적립을 스킵하고 앵커만
+  // 리셋해야 함(그 구간은 pedometer 전담, 이중 집계 방지). map_screen이 매 픽스에서 이 플래그를
+  // 확인하고, 신선한 픽스로 앵커를 리셋한 뒤 [clearGpsAnchorPendingReset]로 내린다.
+  bool _gpsAnchorPendingReset = false;
+  // Stale Fix 방어(temp.md 5-c) — `resumed` 직후 OS가 내보내는 낡은 캐시 좌표를 앵커로 삼지
+  // 않도록, map_screen이 `Position.timestamp`를 이 시각과 비교해 이전 픽스는 버린다.
+  DateTime? _lastResumedAt;
+
+  bool get _pedometerSupported => Platform.isAndroid;
+
+  /// 서버 flush 타이머를 켜고(게스트도 로컬 적립엔 무관하지만 타이머 자체는 무해), pedometer
+  /// 보조 경로를 시작한다. [requestPermissionIfNeeded]가 false면 `ACTIVITY_RECOGNITION` 권한이
+  /// 이미 있을 때만 조용히 구독하고, 없으면 OS 권한 다이얼로그를 띄우지 않고 대기(앱 실행 직후
+  /// main.dart는 항상 false — 지도도 보기 전에 권한 팝업이 뜨지 않도록, JIT 원칙).
   ///
-  /// 반환값: 동기화 서비스가 도는 상태(권한이 있어 파트너 알 적립이 가능)면 true, 권한 거부/
-  /// 미설치로 못 시작했으면 false. 이미 돌고 있던 경우(재호출) true. 호출부가 이 값으로 "권한
-  /// 없으니 방금 건 파트너 지정을 되돌린다" 같은 판단을 한다.
-  Future<bool> start(AuthSession authSession, {bool requestPermissionIfNeeded = true}) async {
+  /// 반환값: pedometer 보조 경로가 활성(권한 확보 또는 비안드로이드)이면 true, 권한 거부로 못
+  /// 켰으면 false. **주 경로(GPS)는 이 반환값과 무관하게 항상 동작하므로**, 호출부는 이 값으로
+  /// 파트너 지정을 되돌리는 등의 하드 실패 처리를 하면 안 된다(temp.md 6번 graceful degradation).
+  Future<bool> start(
+    AuthSession authSession, {
+    bool requestPermissionIfNeeded = true,
+  }) async {
     _authSession = authSession;
-    if (_starting || _syncTimer != null) return true;
+    _serverFlushTimer ??= Timer.periodic(
+      GameConfig.distanceServerSyncInterval,
+      (_) => syncNow(),
+    );
+
+    if (!_pedometerSupported) return true;
+    if (_pedometerSub != null) return true;
+    if (_starting) return true;
+    // 보조 경로는 사용자가 "앱이 꺼져 있어도 거리 측정"을 명시적으로 켠 경우에만 구독한다.
+    // main.dart의 조용한 재개(requestPermissionIfNeeded: false)도 이 플래그가 살아있을 때만
+    // pedometer를 다시 붙인다 — 안 켰으면 GPS 주 경로만 동작.
+    if (!await isBackgroundDistanceEnabled()) return false;
     _starting = true;
     try {
-      _health.configure();
-      final granted = await _ensurePermission(requestIfNeeded: requestPermissionIfNeeded);
+      final granted = await _ensureActivityPermission(
+        requestIfNeeded: requestPermissionIfNeeded,
+      );
       if (!granted) {
         if (requestPermissionIfNeeded) {
-          developer.log('Health Connect 권한/설치 필요 — 파트너 알 진행 불가', name: 'DistanceTrackerService');
+          developer.log(
+            'ACTIVITY_RECOGNITION 권한 없음 — 백그라운드 걸음 보조 경로 비활성(GPS 주 경로는 정상)',
+            name: 'DistanceTrackerService',
+          );
         }
         return false;
       }
-      _syncTimer = Timer.periodic(GameConfig.distanceServerSyncInterval, (_) => syncNow());
-      unawaited(syncNow());
+      _subscribePedometer();
+      // cold start(백그라운드에서 프로세스가 회수됨) — 저장된 baseline이 있으면 첫 스텝 이벤트
+      // 때 diff를 반영(temp.md 2번 self-healing).
+      if (await _hasStoredPedometerBaseline()) {
+        _lastResumedAt ??= DateTime.now();
+        _pendingResumedDiffCheck = true;
+      }
       return true;
     } finally {
       _starting = false;
     }
   }
 
-  /// 부작용 없이(설치/권한 팝업 유도 안 함) 현재 Health Connect 권한이 이미 있는지만 확인 —
-  /// 파트너 알을 처음 지정하기 전에 "이제 곧 Health Connect 설치/권한 화면으로 넘어갑니다" 안내를
-  /// 띄울지 판단하는 용도(egg_inventory_screen.dart). 이미 권한이 있으면 안내 없이 바로 진행해도
-  /// 됨 — 어차피 아무 팝업도 안 뜸(실기기 확인, Document/temp.md 참고: 예고 없이 갑자기 Play
-  /// Store 설치 화면으로 넘어가서 당황스러웠던 문제).
-  Future<bool> hasPermission() => _ensurePermission(requestIfNeeded: false);
+  /// 부작용 없이(권한 팝업 유도 안 함) 현재 `ACTIVITY_RECOGNITION` 권한이 있는지만 확인 —
+  /// 파트너 박스의 복구 배너 노출 판단 등에 쓴다.
+  Future<bool> hasActivityPermission() =>
+      _ensureActivityPermission(requestIfNeeded: false);
 
-  /// 마지막으로 거리 데이터를 실제로 갱신한 시각([syncNow]가 오늘 스냅샷 반영을 끝낸 시점, 또는
-  /// 최초 baseline 저장 시점). UI가 "N분 전 기준" 같은 상대 시각을 보여줘서, 화면의 거리 수치가
-  /// 실시간이 아니라 [GameConfig.distanceServerSyncInterval] 주기로만 갱신된다는 것(배터리 절약
-  /// 목적)을 사용자에게 알리는 용도. 아직 한 번도 동기화된 적 없으면 null.
-  Future<DateTime?> lastSyncedAt() async {
-    final raw = await _settings.getValue(_lastSyncedAtKey);
-    if (raw == null) return null;
-    return DateTime.tryParse(raw);
-  }
+  /// 사용자가 "앱이 꺼져 있어도 거리 측정" 토글을 켰는지(기본 false).
+  Future<bool> isBackgroundDistanceEnabled() async =>
+      (await _settings.getValue(_bgDistanceEnabledKey)) == 'true';
 
-  Future<bool> _ensurePermission({required bool requestIfNeeded}) async {
-    if (Platform.isAndroid) {
-      final status = await _health.getHealthConnectSdkStatus();
-      if (status != HealthConnectSdkStatus.sdkAvailable) {
-        if (!requestIfNeeded) return false;
-        // 미설치/업데이트 필요 — Play Store로 유도만 하고 이번 실행은 종료(다음 실행 때 재확인).
-        await _health.installHealthConnect();
-        return false;
-      }
+  /// 토글 ON — OS 신체활동 권한을 요청하고, 허용되면 플래그를 저장하고 pedometer 보조 경로를
+  /// 켠다. 반환: 실제로 켜졌는지(권한 거부면 false, 플래그도 안 바뀜). 영구 거부 상태는 호출부가
+  /// [isActivityPermissionPermanentlyDenied]로 먼저 걸러 설정 앱으로 보내야 한다.
+  Future<bool> enableBackgroundDistance(AuthSession authSession) async {
+    _authSession = authSession;
+    if (!_pedometerSupported) return false;
+    final granted = await _ensureActivityPermission(requestIfNeeded: true);
+    if (!granted) return false;
+    await _settings.setValue(_bgDistanceEnabledKey, 'true');
+    _subscribePedometer();
+    if (await _hasStoredPedometerBaseline()) {
+      _lastResumedAt ??= DateTime.now();
+      _pendingResumedDiffCheck = true;
     }
-    const types = [HealthDataType.STEPS];
-    var granted = await _health.hasPermissions(types) ?? false;
-    if (!granted) {
-      if (!requestIfNeeded) return false;
-      try {
-        granted = await _health.requestAuthorization(types);
-      } catch (e) {
-        developer.log('Health Connect 권한 요청 실패: $e', name: 'DistanceTrackerService');
-        return false;
-      }
-      if (!granted) return false;
-    }
-
-    // READ_HEALTH_DATA_IN_BACKGROUND(백그라운드 STEPS 읽기, Android 15+에만 존재)는 요청하지
-    // 않는다 — Health Connect 심사에서 가장 까다롭게 보는 권한인데, 얻는 건 "앱이 백그라운드일 때도
-    // 주기 타이머/전환 시 동기화가 성공"하는 것뿐이고, 그건 없어도 포그라운드 복귀(main.dart의
-    // `resumed`) 때 syncNow()가 [마지막 반영, now) 하루 전체를 재조회해 유실 없이 따라잡는다
-    // (self-healing). Android 14 이하는 애초에 이 권한이 없어 이미 이 방식으로 동작 중이었고,
-    // 15+도 같은 방식으로 통일(2026-08-29 결정, study_folder/4-1). 백그라운드에서의 STEPS 읽기는
-    // RemoteException으로 실패하지만 syncNow()의 catch가 삼키므로 무해.
     return true;
   }
 
-  /// 주기 타이머 + 백그라운드 전환/복귀 시(main.dart) + 부화 시도 직전(egg_inventory_screen.dart)
-  /// 셋 다 이걸 호출. "오늘"(리셋 경계 기준) 전체를 다시 조회해 지금까지 반영해둔 baseline과의
-  /// 차이만 로컬 파트너알/일별 히스토리에 적립하고, 로그인 상태면 서버에도 동기화. 날짜가 바뀐
-  /// 경우엔 닫힌 지난 날짜(들)를 먼저 한 번 캐치업.
-  Future<void> syncNow() async {
-    if (_syncing) return;
-    _syncing = true;
+  /// 토글 OFF — 플래그를 내리고 pedometer 보조 경로를 멈춘다. OS 권한은 앱이 회수할 수 없어
+  /// 그대로 두되(무해) 앱이 더는 걸음 스트림을 구독하지 않는다. 완전 해제는 시스템 설정에서.
+  Future<void> disableBackgroundDistance() async {
+    await _settings.setValue(_bgDistanceEnabledKey, 'false');
+    _pedometerSub?.cancel();
+    _pedometerSub = null;
+    await _clearPedometerBaseline();
+  }
+
+  /// 영구 거부 상태 — 재요청해도 OS 팝업이 안 뜨므로 복구 경로는 설정 앱 열기로 분기해야 함
+  /// (Document/temp.md 6-b).
+  Future<bool> isActivityPermissionPermanentlyDenied() async {
+    if (!_pedometerSupported) return false;
+    return Permission.activityRecognition.isPermanentlyDenied;
+  }
+
+  /// 설정 앱 열기(영구 거부 복구 경로).
+  Future<bool> openPermissionSettings() => openAppSettings();
+
+  /// UI "N분 전 갱신" 표시용 — 마지막으로 서버 flush를 시도했거나 거리가 갱신된 시각.
+  Future<DateTime?> lastSyncedAt() async {
+    final raw = await _settings.getValue(_lastSyncedAtKey);
+    if (raw == null || raw.isEmpty) return null;
+    return DateTime.tryParse(raw);
+  }
+
+  Future<bool> _ensureActivityPermission({required bool requestIfNeeded}) async {
+    if (!_pedometerSupported) return false;
+    var status = await Permission.activityRecognition.status;
+    if (status.isGranted) return true;
+    if (!requestIfNeeded) return false;
     try {
-      final now = DateTime.now();
-      final todayKey = resetDayKey(now);
-      final todayStart = resetDayStart(now);
-      final storedDayKey = await _settings.getValue(_todayAppliedDayKeyKey);
-
-      if (storedDayKey == null) {
-        // 최초 실행 — temp.md 미결 사항 결정대로 과거 데이터 백필 없이 지금부터 새로 시작. 지금
-        // 시점의 오늘 누적치를 baseline으로만 저장(반영은 안 함) — 이후 늘어난 만큼만 적립됨.
-        final byDay = await _queryStepsByDay(_safeQueryStart(todayStart), now);
-        final currentTotal = byDay[todayKey] ?? 0;
-        await _settings.setValue(_todayAppliedDayKeyKey, todayKey);
-        await _settings.setValue(_todayAppliedMetersKey, '$currentTotal');
-        await _settings.setValue(_lastSyncedAtKey, now.toIso8601String());
-        return;
-      }
-
-      var storedApplied = double.tryParse(await _settings.getValue(_todayAppliedMetersKey) ?? '0') ?? 0;
-
-      if (storedDayKey != todayKey) {
-        // 날짜가 바뀜 — 닫힌 지난 날짜(들)를 한 번만 캐치업. [storedDayKey](방금까지 "오늘"이던 날)는
-        // 이미 storedApplied만큼 부분 반영이 돼 있으므로 그 날짜만 diff로, 그 사이에 앱을 전혀 안 켜서
-        // 한 번도 반영 안 된 날짜(들)는 전체 총량으로 반영. 이후 정기 동기화에서 다시 이 날짜들을
-        // 처리하지 않음 — todayKey 아닌 키는 여기서만 처리.
-        final closedByDay = await _queryStepsByDay(
-          _safeQueryStart(resetDayStartFromKey(storedDayKey)),
-          todayStart,
-        );
-        var closedDeltaMeters = 0.0;
-        for (final entry in closedByDay.entries) {
-          // todayKey 항목은 오늘 자정부터 시작하는 레코드가 이 구간(끝=todayStart) 안에도 걸쳐서
-          // 비례 배분된 결과일 뿐 — 오늘 몫은 바로 아래 "오늘 몫" 처리에서 정확한 구간으로 다시
-          // 계산되므로 여기서 건드리면 이중 집계됨.
-          if (entry.key == todayKey) continue;
-          final baseline = entry.key == storedDayKey ? storedApplied : 0;
-          final dayDelta = entry.value - baseline;
-          if (dayDelta <= 0) continue;
-          await _dailyDistanceRepository.addDistanceForDay(entry.key, dayDelta);
-          closedDeltaMeters += dayDelta;
-        }
-        if (closedDeltaMeters > 0) {
-          final roundedMeters = closedDeltaMeters.round();
-          await _eggRepository.addDistanceToPartners(roundedMeters);
-          await _addPendingServerSync(roundedMeters, false);
-        }
-        storedApplied = 0;
-        await _settings.setValue(_todayAppliedDayKeyKey, todayKey);
-        await _settings.setValue(_todayAppliedMetersKey, '0');
-      }
-
-      // 오늘 몫 — 항상 [안전 시작 시각, now) 전체를 다시 조회해 오늘 총량과 baseline의 차이만
-      // 적립. Health Connect가 하루 전체를 하나로 몰아서 upsert하는 소스(삼성 헬스 등)에도 안전하게
-      // 대응(_queryStepsByDay/_safeQueryStart 참고). 이 호출에서 todayKey 아닌 날짜가 같이 잡혀도
-      // 무시 — 그 날짜는 위 캐치업 분기에서만 한 번 처리됨.
-      final byDay = await _queryStepsByDay(_safeQueryStart(todayStart), now);
-      final todayTotal = byDay[todayKey] ?? 0;
-      final deltaMeters = todayTotal - storedApplied;
-
-      final mockDetected = await _checkMockLocation();
-
-      if (deltaMeters > 0) {
-        await _dailyDistanceRepository.addDistanceForDay(todayKey, deltaMeters);
-        final roundedMeters = deltaMeters.round();
-        await _eggRepository.addDistanceToPartners(roundedMeters);
-        await _addPendingServerSync(roundedMeters, mockDetected);
-        // 절대값 total로 저장(누적 add가 아님) — float 오차가 반복 누적되는 것을 방지.
-        await _settings.setValue(_todayAppliedMetersKey, '$todayTotal');
-      } else if (mockDetected) {
-        // 이번엔 새로 늘어난 거리가 없었지만 mock이 감지됐으면 그 사실만이라도 다음 서버 호출에 실어보냄.
-        await _addPendingServerSync(0, mockDetected);
-      }
-      // deltaMeters <= 0인 경우(HC 총량이 일시적으로 줄어드는 이례적 케이스) baseline을 그대로 둬서
-      // 다음 동기화 때 같은 기준으로 재시도됨.
-
-      await _settings.setValue(_lastSyncedAtKey, now.toIso8601String());
-      await _flushPendingToServer();
+      status = await Permission.activityRecognition.request();
     } catch (e) {
-      developer.log('거리 동기화 실패(다음 시도 때 재시도): $e', name: 'DistanceTrackerService');
-    } finally {
-      _syncing = false;
-    }
-  }
-
-  /// [gameDayBoundary](리셋 경계 시각, KST 4시)를 실제 Health Connect 조회 시작 시각으로 안전하게
-  /// 앞당김 — 실기기 확인(2026-08-27) 결과 Health Connect의 `readRecords`는 **레코드 자체의 시작
-  /// 시각이 조회 구간 시작 시각보다 이른 레코드를 통째로 안 돌려줌**. 삼성 헬스는 걸음수를 자정
-  /// (00:00, 리셋 경계보다 4시간 이름)부터 시작하는 하루 통짜 레코드 하나로 계속 upsert하는데,
-  /// 조회를 리셋 경계(4시)부터로 좁히면 이 레코드가 매번 통째로 누락됨(daily_distance/
-  /// pending_server_sync_delta_meters가 몇 주째 전혀 안 쌓이던 근본 원인).
-  ///
-  /// 자정에서 30분만 더 앞당김 — 리셋 경계와 자정 사이 4시간에 비해 충분히 여유 있지만, **하루를
-  /// 넘겨서 전날 자정까지 침범하지 않도록 의도적으로 작게 잡음**. `syncNow()`의 날짜 롤오버
-  /// 캐치업 분기가 [storedDayKey]의 레코드만 잡아야 하는데, 여유를 하루치로 뒀다가 전날(이미 그
-  /// 전 전환에서 다 처리된 날짜) 레코드까지 다시 잡아 이중 집계되는 버그가 있었음(2026-08-27
-  /// 발견) — 그래서 리셋 경계~자정 사이(4시간)보다는 훨씬 짧게, 전날 자정까지는 절대 안 닿는
-  /// 폭으로 제한.
-  DateTime _safeQueryStart(DateTime gameDayBoundary) => gameDayBoundary
-      .subtract(const Duration(hours: GameConfig.dailyResetHourKst))
-      .subtract(const Duration(minutes: 30));
-
-  /// [start, end) 구간의 Health Connect STEPS 레코드를 조회해 [splitByResetDay]로 게임 날짜별
-  /// 거리(m) 합계로 배분 — 오늘 스냅샷 조회와 닫힌 날짜 캐치업 조회 양쪽에서 재사용.
-  Future<Map<String, double>> _queryStepsByDay(DateTime start, DateTime end) async {
-    if (!end.isAfter(start)) return {};
-    final points = await _health.getHealthDataFromTypes(
-      types: const [HealthDataType.STEPS],
-      startTime: start,
-      endTime: end,
-      // 수동 입력 데이터는 제외(temp.md "메타데이터로 감지해 제외 가능") — 자동/능동 기록만 인정.
-      recordingMethodsToFilter: const [RecordingMethod.manual],
-    );
-    final result = <String, double>{};
-    for (final point in points) {
-      final value = point.value;
-      if (value is! NumericHealthValue) continue;
-      final meters = value.numericValue.toDouble() * GameConfig.stepsToMetersFactor;
-      for (final entry in splitByResetDay(point.dateFrom, point.dateTo, meters)) {
-        result[entry.key] = (result[entry.key] ?? 0) + entry.value;
-      }
-    }
-    return result;
-  }
-
-  /// 동기화 시점에 mock-location(가짜 GPS)이 켜져 있는지 1회 확인 — Health Connect 거리 자체는
-  /// GPS를 안 쓰지만, 지도 화면이 이미 쓰고 있는 "사용 중일 때만" 위치 권한을 그대로 재사용해서
-  /// 별도 권한 추가 없이 확인 가능(temp.md "중요한 역설" 절 참고). 위치 권한이 없거나 조회
-  /// 실패하면 mock 여부를 판단할 수 없으므로 false(감지 안 됨) 취급 — 이 기능의 목적은 명백한
-  /// 스푸핑을 잡아내는 것이지, 권한 미허용 자체를 치팅으로 간주하는 게 아님.
-  Future<bool> _checkMockLocation() async {
-    if (!Platform.isAndroid) return false;
-    try {
-      final permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
-        return false;
-      }
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.lowest),
+      developer.log(
+        'ACTIVITY_RECOGNITION 권한 요청 실패: $e',
+        name: 'DistanceTrackerService',
       );
-      return position.isMocked;
-    } catch (e) {
-      developer.log('mock-location 확인 실패(감지 안 됨으로 처리): $e', name: 'DistanceTrackerService');
       return false;
     }
+    return status.isGranted;
+  }
+
+  void _subscribePedometer() {
+    _pedometerSub ??= Pedometer.stepCountStream.listen(
+      (event) {
+        _lastKnownStepCount = event.steps;
+        if (!_pendingResumedDiffCheck) return;
+        // Stale/버퍼된 이벤트 방어 — resumed 이전 타임스탬프 이벤트로는 diff를 트리거하지 않음
+        // (그 값은 pause 이전 캐시라 diff가 0/음수로 나와 진짜 백그라운드 걸음을 잃게 됨).
+        final resumedAt = _lastResumedAt;
+        if (resumedAt != null && event.timeStamp.isBefore(resumedAt)) return;
+        _pendingResumedDiffCheck = false;
+        unawaited(_applyPedometerBackgroundDiff(event.steps));
+      },
+      onError: (Object e) {
+        developer.log(
+          'pedometer 스트림 오류(보조 경로 일시 비활성): $e',
+          name: 'DistanceTrackerService',
+        );
+      },
+      cancelOnError: false,
+    );
+  }
+
+  Future<bool> _hasStoredPedometerBaseline() async {
+    final raw = await _settings.getValue(_pedometerBaselineKey);
+    return raw != null && raw.isNotEmpty;
+  }
+
+  Future<void> _clearPedometerBaseline() async {
+    await _settings.deleteValue(_pedometerBaselineKey);
+    await _settings.deleteValue(_pedometerBaselineAtKey);
+  }
+
+  /// 앱이 백그라운드로 전환되는 시점(main.dart `didChangeAppLifecycleState`) — 보조 경로 baseline을
+  /// persist하고, GPS 앵커 리셋 플래그를 세우고(5-c), 미전송 델타를 한 번 더 flush 시도.
+  Future<void> onAppPaused() async {
+    _gpsAnchorPendingReset = true;
+    // 보조 경로가 실제로 구독 중일 때만 baseline을 건드린다 — 권한이 없거나(구독 안 됨) 이번
+    // 세션에 스텝 이벤트를 한 번도 못 받았으면 조용히 스킵(temp.md 6번 graceful degradation).
+    if (_pedometerSupported && _pedometerSub != null) {
+      final steps = _lastKnownStepCount;
+      if (steps != null) {
+        await _settings.setValue(_pedometerBaselineKey, '$steps');
+        await _settings.setValue(
+          _pedometerBaselineAtKey,
+          DateTime.now().toIso8601String(),
+        );
+      }
+      // steps == null(앱이 방금 켜져 아직 한 번도 스텝 이벤트를 못 받음) — baseline 갱신을 스킵하고
+      // 이전 값을 그대로 둔다(다음 사이클에서 정상 캐싱되면 복구, temp.md 2번).
+    }
+    await _flushPendingToServer();
+  }
+
+  /// 앱이 포그라운드로 복귀하는 시점 — 첫 신선한 스텝 이벤트가 오면 보조 경로 diff를 반영하도록
+  /// 무장하고, 서버로 flush.
+  Future<void> onAppResumed() async {
+    _lastResumedAt = DateTime.now();
+    if (_pedometerSupported && await _hasStoredPedometerBaseline()) {
+      // 동기 getter가 없으므로 즉시 계산하지 않는다 — 캐시된 [_lastKnownStepCount]는 pause 이전
+      // 값이라 diff가 0/음수로 나옴. 스트림의 다음 신선한 이벤트가 오면 그때 계산.
+      _pendingResumedDiffCheck = true;
+    }
+    await _flushPendingToServer();
+  }
+
+  Future<void> _applyPedometerBackgroundDiff(int current) async {
+    try {
+      final baselineRaw = await _settings.getValue(_pedometerBaselineKey);
+      final baselineAtRaw = await _settings.getValue(_pedometerBaselineAtKey);
+      if (baselineRaw == null || baselineRaw.isEmpty) return;
+      final baseline = int.tryParse(baselineRaw);
+      final baselineAt = (baselineAtRaw == null || baselineAtRaw.isEmpty)
+          ? null
+          : DateTime.tryParse(baselineAtRaw);
+      // 이 diff는 어떤 경로로 들어와도 한 번만 반영 — 먼저 baseline을 지운다.
+      await _clearPedometerBaseline();
+      if (baseline == null) return;
+
+      // 3번 — 재부팅으로 카운터가 리셋됨(현재값 < baseline). diff 계산 불가, 그 구간 걸음은 유실 감수.
+      if (current < baseline) {
+        developer.log(
+          'pedometer 카운터 리셋 감지(재부팅) — 이 구간 적립 스킵',
+          name: 'DistanceTrackerService',
+        );
+        return;
+      }
+      final rawDiff = current - baseline;
+      if (rawDiff <= 0) return;
+
+      final now = DateTime.now();
+      // 4번 — 시계 역전(baseline 시각이 지금보다 미래) 방어: diff 자체를 버림.
+      if (baselineAt == null || now.isBefore(baselineAt)) {
+        developer.log(
+          'pedometer baseline 시각 이상(시계 역전?) — 적립 스킵',
+          name: 'DistanceTrackerService',
+        );
+        return;
+      }
+      var elapsedMinutes = now.difference(baselineAt).inMinutes;
+      // 절대 상한 — 극단적 시계 조작/장기 방치의 피해 규모 제한(4번).
+      final capMinutes = GameConfig.backgroundBonusElapsedCapHours * 60;
+      if (elapsedMinutes > capMinutes) elapsedMinutes = capMinutes;
+      if (elapsedMinutes < 1) elapsedMinutes = 1;
+
+      // 4번 — 카덴스(분당 걸음) 상한으로 diff 클램프. 정상 사용자는 안 걸리고 장시간 방치형
+      // 흔들개만 상한에 막힘.
+      final maxPlausibleSteps =
+          elapsedMinutes * GameConfig.maxPlausibleStepsPerMinute;
+      final appliedSteps = rawDiff < maxPlausibleSteps
+          ? rawDiff
+          : maxPlausibleSteps;
+      if (appliedSteps <= 0) return;
+
+      // 3-b — diff 전액을 `resumed` 시점 기준 "오늘"로 적립(리셋 경계를 걸친 구간의 정밀
+      // 재분배는 하지 않음 — 보조 경로는 근사치 허용 영역이고, 위 카덴스 클램프가 왜곡의 최대
+      // 규모도 함께 제한함). [_creditDistance]가 오늘 키로 적립.
+      final meters = appliedSteps * GameConfig.stepsToMetersFactor;
+      await _creditDistance(meters, mockDetected: false);
+      await _flushPendingToServer();
+    } catch (e) {
+      developer.log(
+        'pedometer 백그라운드 diff 반영 실패: $e',
+        name: 'DistanceTrackerService',
+      );
+    }
+  }
+
+  /// GPS 주 경로 — `map_screen._onPositionFix`가 노이즈 필터/클램프를 거친 뒤 좌표 간 이동
+  /// 거리(m)를 넘긴다. [mocked]는 그 픽스의 `Position.isMocked`(치팅 감사 로그용).
+  Future<void> addGpsDelta(double meters, {required bool mocked}) async {
+    try {
+      await _creditDistance(meters, mockDetected: mocked);
+    } catch (e) {
+      developer.log('GPS 거리 적립 실패: $e', name: 'DistanceTrackerService');
+    }
+  }
+
+  /// 디버그 전용 — 실제로 걷지 않고 거리 적립 전체 경로(일별 히스토리 → 파트너 알 → 서버 pending)
+  /// 를 검증하기 위한 주입(debug_distance_injector_button.dart).
+  Future<void> debugCreditMeters(double meters) async {
+    await _creditDistance(meters, mockDetected: false);
+    await _flushPendingToServer();
+  }
+
+  /// 두 경로 공용 적립 — 일별 히스토리(daily_distance)엔 소수 그대로, 파트너 알/서버 pending엔
+  /// 정수 미터로 적립(소수부는 [_unappliedMeters]에 이월). 갱신 시각도 여기서 stamp.
+  Future<void> _creditDistance(
+    double meters, {
+    required bool mockDetected,
+  }) async {
+    if (meters <= 0 && !mockDetected) return;
+    final now = DateTime.now();
+    if (meters > 0) {
+      await _dailyDistanceRepository.addDistanceForDay(resetDayKey(now), meters);
+      _unappliedMeters += meters;
+    }
+    final whole = _unappliedMeters.floor();
+    if (whole > 0) {
+      _unappliedMeters -= whole;
+      await _eggRepository.addDistanceToPartners(whole);
+      await _addPendingServerSync(whole, mockDetected);
+    } else if (mockDetected) {
+      await _addPendingServerSync(0, true);
+    }
+    await _settings.setValue(_lastSyncedAtKey, now.toIso8601String());
   }
 
   Future<void> _addPendingServerSync(int deltaMeters, bool mockDetected) async {
     final stored = await _settings.getValue(_pendingServerSyncDeltaKey);
     final current = int.tryParse(stored ?? '0') ?? 0;
-    await _settings.setValue(_pendingServerSyncDeltaKey, '${current + deltaMeters}');
+    await _settings.setValue(
+      _pendingServerSyncDeltaKey,
+      '${current + deltaMeters}',
+    );
     if (mockDetected) {
       await _settings.setValue(_pendingMockDetectedKey, 'true');
     }
@@ -334,21 +403,63 @@ class DistanceTrackerService {
     await _settings.setValue(_pendingMockDetectedKey, 'false');
   }
 
+  /// flush 성공 후 — **보낸 만큼만** 차감한다(0으로 blind reset하지 않음). GPS 델타는
+  /// `_flushPendingToServer`의 서버 왕복(모바일 네트워크라 수 초 걸릴 수 있음) 도중에도
+  /// `_creditDistance`로 계속 쌓이는데, 그때 0으로 리셋하면 왕복 중 쌓인 델타가 서버엔 안 갔는데
+  /// 로컬에선 지워져 유실된다.
+  Future<void> _consumePendingServerSync(int sentDelta, bool sentMock) async {
+    final stored =
+        int.tryParse(await _settings.getValue(_pendingServerSyncDeltaKey) ?? '0') ??
+        0;
+    final remaining = stored - sentDelta;
+    await _settings.setValue(
+      _pendingServerSyncDeltaKey,
+      '${remaining < 0 ? 0 : remaining}',
+    );
+    // mock 플래그는 best-effort 감사 신호라(다음 탐지 때 다시 세워짐) 보낸 경우 내린다.
+    if (sentMock) {
+      await _settings.setValue(_pendingMockDetectedKey, 'false');
+    }
+  }
+
+  /// 주기 타이머 + 백그라운드 전환/복귀 + 부화 시도 직전(egg_inventory_screen.dart)이 호출 —
+  /// 갱신 시각을 stamp하고 미전송 델타를 서버로 flush.
+  Future<void> syncNow() async {
+    if (_flushing) return;
+    _flushing = true;
+    try {
+      await _settings.setValue(
+        _lastSyncedAtKey,
+        DateTime.now().toIso8601String(),
+      );
+      await _flushPendingToServer();
+    } catch (e) {
+      developer.log(
+        '거리 서버 flush 실패(다음 시도 때 재시도): $e',
+        name: 'DistanceTrackerService',
+      );
+    } finally {
+      _flushing = false;
+    }
+  }
+
   /// 게스트면 조용히 무시(서버에 상태 자체가 없으므로). 실패해도 예외를 삼킴 — 다음 시도 때
   /// pending이 그대로 남아 따라잡힘.
   Future<void> _flushPendingToServer() async {
+    if (_serverBusy) return;
     final session = _authSession;
     if (session == null || !session.isLoggedIn) return;
 
     final storedDelta = await _settings.getValue(_pendingServerSyncDeltaKey);
     final pendingDelta = int.tryParse(storedDelta ?? '0') ?? 0;
-    final pendingMockDetected = (await _settings.getValue(_pendingMockDetectedKey)) == 'true';
+    final pendingMockDetected =
+        (await _settings.getValue(_pendingMockDetectedKey)) == 'true';
     if (pendingDelta <= 0 && !pendingMockDetected) return;
 
+    _serverBusy = true;
     try {
       // Part 1(Document/temp.md) — 서버엔 파트너 개념이 없어 이번에 거리를 적립할 파트너 알 id를
-      // 그 시점 로컬 상태에서 조회해 함께 보냄. 실패~재시도 사이 파트너가 바뀌면 델타가 새 파트너로
-      // 가는데, 로컬 addDistanceToPartners 동작과 근사하고 최대 1 sync 간격 분량이라 무시 가능.
+      // 그 시점 로컬 상태에서 조회해 함께 보냄.
       final partnerEggIds = await _eggRepository.getPartnerEggIds();
       final api = DistanceSyncApi(AuthorizedApiClient(session));
       final serverDistances = await api.sync(
@@ -356,17 +467,29 @@ class DistanceTrackerService {
         mockDetected: pendingMockDetected,
         partnerEggIds: partnerEggIds,
       );
-      await resetPendingServerSyncDelta();
-      // Part 3-A — 서버가 속도 클램프/ mock 스킵으로 조정한 최종 누적값을 로컬 파트너 알에 반영
-      // (회원은 서버 authoritative). 이로써 부화 진행도 바가 "실제로 부화 때 인정될 값"을 보여줌.
+      await _consumePendingServerSync(pendingDelta, pendingMockDetected);
+      // Part 3-A — 서버가 속도 클램프/mock 스킵으로 조정한 최종 누적값을 로컬 파트너 알에 반영
+      // (회원은 서버 authoritative). 부화 진행도 바가 "실제로 부화 때 인정될 값"을 보여줌.
       await _eggRepository.applyServerDistances(serverDistances);
     } catch (e) {
-      developer.log('거리 서버 동기화 실패(다음 시도 때 재시도): $e', name: 'DistanceTrackerService');
+      developer.log(
+        '거리 서버 동기화 실패(다음 시도 때 재시도): $e',
+        name: 'DistanceTrackerService',
+      );
+    } finally {
+      _serverBusy = false;
     }
   }
 
+  // ── 5-c: GPS 앵커 조정 (map_screen이 읽고 내림) ──────────────────────────────
+  bool get gpsAnchorPendingReset => _gpsAnchorPendingReset;
+  DateTime? get lastResumedAt => _lastResumedAt;
+  void clearGpsAnchorPendingReset() => _gpsAnchorPendingReset = false;
+
   void dispose() {
-    _syncTimer?.cancel();
-    _syncTimer = null;
+    _serverFlushTimer?.cancel();
+    _serverFlushTimer = null;
+    _pedometerSub?.cancel();
+    _pedometerSub = null;
   }
 }

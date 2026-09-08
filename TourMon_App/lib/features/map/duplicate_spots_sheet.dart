@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import '../../config/sketch/sketch_theme.dart';
 import '../../data/tourism_spot_repository.dart';
 import '../../l10n/api_locale.dart';
 import '../../l10n/app_localizations.dart';
@@ -51,6 +52,10 @@ class _DuplicateSpotsSheetState extends State<DuplicateSpotsSheet> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      // TourismSpotSheet 자체가 SketchTheme으로 다시 감싸지만, 시트의 Material 배경은
+      // showModalBottomSheet 호출부 context의 앙비언트 테마(=앱 전역 다크)로 만들어지므로
+      // 명시적으로 종이색을 줌(map_screen.dart _onSpotTapped와 같은 이유).
+      backgroundColor: SketchTheme.paper,
       builder: (context) => TourismSpotSheet(
         spot: spot,
         cooldownSpotId: widget.representativeId,
@@ -61,44 +66,64 @@ class _DuplicateSpotsSheetState extends State<DuplicateSpotsSheet> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    return SafeArea(
-      child: SizedBox(
-        height: MediaQuery.of(context).size.height * 0.7,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Row(
+    // 지도 화면과 같은 그림책+연필 스케치 테마를 이 시트에도 지역 적용 — showModalBottomSheet는
+    // Overlay에 별도로 끼워지는 라우트라 호출부(TourismSpotSheet)의 Theme 오버라이드를 자동
+    // 상속하지 않음(tourism_spot_sheet.dart build() 주석 참고). 시트 바깥 Material 배경은 이
+    // 시트를 여는 showModalBottomSheet 호출부(tourism_spot_sheet.dart _openCategory)의
+    // backgroundColor로 맞춤. Builder로 새 context를 얻어 아래 Theme.of(context)가 이 테마를 잡게 함.
+    return Theme(
+      data: SketchTheme.themeData,
+      child: Builder(
+        builder: (context) => Material(
+          color: Colors.transparent,
+          child: SafeArea(
+            child: SizedBox(
+              height: MediaQuery.of(context).size.height * 0.7,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(contentTypeIcon(widget.contentTypeId)),
-                  const SizedBox(width: 8),
-                  Text(
-                    contentTypeLabel(context, widget.contentTypeId),
-                    style: Theme.of(context).textTheme.titleLarge,
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                    child: Row(
+                      children: [
+                        Icon(contentTypeIcon(widget.contentTypeId)),
+                        const SizedBox(width: 8),
+                        Text(
+                          contentTypeLabel(context, widget.contentTypeId),
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: FutureBuilder<List<TourismSpot>>(
+                      future: _future,
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState != ConnectionState.done) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        }
+                        if (snapshot.hasError) {
+                          return Center(
+                            child: Text(
+                              l10n.duplicateSpotsLoadFailedMessage(
+                                '${snapshot.error}',
+                              ),
+                            ),
+                          );
+                        }
+                        return _SpotList(
+                          spots: snapshot.data!,
+                          onTap: _openSpot,
+                        );
+                      },
+                    ),
                   ),
                 ],
               ),
             ),
-            Expanded(
-              child: FutureBuilder<List<TourismSpot>>(
-                future: _future,
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState != ConnectionState.done) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  if (snapshot.hasError) {
-                    return Center(
-                      child: Text(
-                        l10n.duplicateSpotsLoadFailedMessage('${snapshot.error}'),
-                      ),
-                    );
-                  }
-                  return _SpotList(spots: snapshot.data!, onTap: _openSpot);
-                },
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -131,12 +156,20 @@ class _SpotList extends StatelessWidget {
                   ),
                 )
               : const SizedBox(width: 48, height: 48),
-          title: Text(displayTitleOf(context, title: spot.title, titleEn: spot.titleEn)),
+          // 관광지 이름/주소는 고유명사·행정구역명이라 손글씨 폰트(Gaegu)보다 가독성이 중요해서
+          // 기본 서체(Roboto)로 표시 — tourism_spot_sheet.dart의 제목/주소와 같은 이유.
+          title: Text(
+            displayTitleOf(context, title: spot.title, titleEn: spot.titleEn),
+            style: Theme.of(context).textTheme.bodyLarge
+                ?.copyWith(fontFamily: 'Roboto'),
+          ),
           subtitle: spot.addr1 != null
               ? Text(
                   [spot.addr1, spot.addr2].where((e) => e != null && e.isNotEmpty).join(' '),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodyMedium
+                      ?.copyWith(fontFamily: 'Roboto'),
                 )
               : null,
           onTap: () => onTap(spot),

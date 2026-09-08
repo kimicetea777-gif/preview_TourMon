@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../audio/sfx.dart';
 import '../../config/api_config.dart';
 import '../../config/auth_config.dart';
+import '../../config/game_config.dart';
 import '../../config/sketch/sketch_theme.dart';
 import '../../data/tourism_spot_repository.dart';
 import '../../l10n/api_locale.dart';
@@ -289,6 +291,8 @@ class _MyPageScreenState extends State<MyPageScreen> {
                 onTap: _changeLanguage,
               ),
               const SizedBox(height: 12),
+              const _SoundCard(),
+              const SizedBox(height: 12),
               _HowToPlayCard(
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(
@@ -357,6 +361,11 @@ class _ProfileSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     if (!session.isLoggedIn) {
+      // 게스트 전용 출시(GameConfig.accountsEnabled=false, Document/temp.md) — 로그인 진입점을
+      // 없애되, 카드는 그대로 두고 버튼만 비활성(회색 아웃라인)으로 표시해 "회원 기능은 예정돼
+      // 있다"는 신호만 준다. 문구도 "준비 중"으로 바꿔 눌리지 않는 이유를 밝힌다. 마이페이지의
+      // 나머지(언어 선택, 관광지 재동기화)는 게스트도 그대로 씀.
+      final accountsComingSoon = !GameConfig.accountsEnabled;
       return Card.outlined(
         key: const ValueKey('profile-guest'),
         color: SketchTheme.paperLight,
@@ -366,11 +375,24 @@ class _ProfileSection extends StatelessWidget {
             children: [
               const Icon(Icons.person_outline, size: 32),
               const SizedBox(width: 12),
-              Expanded(child: Text(l10n.guestBannerMessage)),
-              TextButton(
-                onPressed: busy ? null : onLogin,
-                child: Text(l10n.loginLabel),
+              Expanded(
+                child: Text(
+                  accountsComingSoon
+                      ? l10n.loginComingSoonNote
+                      : l10n.guestBannerMessage,
+                ),
               ),
+              if (accountsComingSoon)
+                // onPressed: null → OutlinedButton이 회색 아웃라인 + 회색 텍스트(비활성)로 렌더됨.
+                OutlinedButton(
+                  onPressed: null,
+                  child: Text(l10n.loginLabel),
+                )
+              else
+                TextButton(
+                  onPressed: busy ? null : onLogin,
+                  child: Text(l10n.loginLabel),
+                ),
             ],
           ),
         ),
@@ -413,6 +435,63 @@ class _ProfileSection extends StatelessWidget {
   }
 }
 
+/// 효과음 on/off — `Sfx`(lib/audio/sfx.dart)가 `app_settings`의 `sfx_enabled`에 저장.
+/// 언어와 달리 이진값이라 다이얼로그 없이 카드 위 스위치로 바로 토글(sound_effect_plan.md 2장).
+/// 다른 마이페이지 카드(`_LanguageCard` 등)와 같은 `Card.outlined` + `ListTile` 틀을 쓰고, 스위치
+/// 색만 색연필 팔레트(주황 accent / 잉크)로 맞춰 기본 파랑 스위치가 크림 배경에서 튀는 걸 막음.
+class _SoundCard extends StatefulWidget {
+  const _SoundCard();
+
+  @override
+  State<_SoundCard> createState() => _SoundCardState();
+}
+
+class _SoundCardState extends State<_SoundCard> {
+  late bool _enabled = Sfx.instance.enabled;
+
+  void _set(bool value) {
+    setState(() => _enabled = value);
+    Sfx.instance.setEnabled(value);
+    if (value) Sfx.instance.play('ui_confirm');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return Card.outlined(
+      color: SketchTheme.paperLight,
+      child: ListTile(
+        leading: Icon(
+          _enabled ? Icons.volume_up_outlined : Icons.volume_off_outlined,
+          size: 32,
+        ),
+        title: Text(
+          l10n.soundSectionTitle,
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        trailing: Switch(
+          value: _enabled,
+          onChanged: _set,
+          thumbColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.selected)
+                ? SketchTheme.paperLight
+                : SketchTheme.ink.withValues(alpha: 0.55),
+          ),
+          trackColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.selected)
+                ? SketchTheme.accent
+                : SketchTheme.paperDark,
+          ),
+          trackOutlineColor: WidgetStateProperty.all(
+            SketchTheme.ink.withValues(alpha: 0.35),
+          ),
+        ),
+        onTap: () => _set(!_enabled),
+      ),
+    );
+  }
+}
+
 class _LanguageCard extends StatelessWidget {
   const _LanguageCard({required this.label, required this.onTap});
 
@@ -438,9 +517,9 @@ class _LanguageCard extends StatelessWidget {
   }
 }
 
-/// TourMon Next.js가 호스팅하는 `/help` 문제 해결 페이지 진입점 — 삼성 헬스/Health Connect
-/// 설정처럼 OS·제조사 UI 버전마다 문구가 바뀌는 안내는 앱 안에 박아두면 스토어 재배포 없이는
-/// 못 고치므로, 약관/개인정보처리방침과 같은 방식(서버 정적 페이지 + 외부 브라우저)으로 둠.
+/// TourMon Next.js가 호스팅하는 `/help` 문제 해결 페이지 진입점 — 위치/신체 활동 권한, 배터리
+/// 최적화 설정처럼 OS·제조사 UI 버전마다 문구가 바뀌는 안내는 앱 안에 박아두면 스토어 재배포
+/// 없이는 못 고치므로, 약관/개인정보처리방침과 같은 방식(서버 정적 페이지 + 외부 브라우저)으로 둠.
 class _HelpCard extends StatelessWidget {
   const _HelpCard({required this.onTap});
 

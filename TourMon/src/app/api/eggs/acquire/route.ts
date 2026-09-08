@@ -16,12 +16,22 @@ export async function POST(request: NextRequest) {
   const locale = resolveLocale(request);
   const body = await request.json().catch(() => null);
   const tourismSpotId = Number(body?.tourismSpotId);
+
+  if (Number.isNaN(tourismSpotId)) {
+    return Response.json({ error: "tourismSpotId가 필요함" }, { status: 400 });
+  }
+
+  // lat/lng는 이제 선택 — 클라이언트가 GameConfig.serverEggProximityCheck=false로 반경 판정을
+  // 로컬 캐시 좌표로 직접 하는 "게스트 전용 출시" 모드에서는 좌표를 아예 안 보낸다(서버에 사용자
+  // 위치정보를 남기지 않기 위함, Document/temp.md). 좌표가 오면 예전처럼 ST_DWithin으로 재검증하고,
+  // 안 오면 반경 검사를 건너뛴다. 되돌릴 때(신고 완료 후)는 클라 플래그만 다시 켜면 됨 — 서버는
+  // 양쪽을 다 지원.
+  const hasCoords = body?.lat != null && body?.lng != null;
   const lat = Number(body?.lat);
   const lng = Number(body?.lng);
-
-  if (Number.isNaN(tourismSpotId) || Number.isNaN(lat) || Number.isNaN(lng)) {
+  if (hasCoords && (Number.isNaN(lat) || Number.isNaN(lng))) {
     return Response.json(
-      { error: "tourismSpotId, lat, lng가 모두 필요함" },
+      { error: "lat, lng가 유효한 숫자가 아님" },
       { status: 400 },
     );
   }
@@ -33,7 +43,9 @@ export async function POST(request: NextRequest) {
       id: tourismSpots.id,
       representativeSpotId: tourismSpots.representativeSpotId,
       eggAcquisitionEnabled: contentTypes.eggAcquisitionEnabled,
-      withinRadius: sql<boolean>`ST_DWithin(${tourismSpots.locationGeog}, ST_MakePoint(${lng}, ${lat})::geography, ${EGG_ACQUISITION_RADIUS_METERS})`,
+      withinRadius: hasCoords
+        ? sql<boolean>`ST_DWithin(${tourismSpots.locationGeog}, ST_MakePoint(${lng}, ${lat})::geography, ${EGG_ACQUISITION_RADIUS_METERS})`
+        : sql<boolean>`true`,
     })
     .from(tourismSpots)
     .innerJoin(contentTypes, eq(contentTypes.id, tourismSpots.contentTypeId))
@@ -47,6 +59,7 @@ export async function POST(request: NextRequest) {
   if (!spot.eggAcquisitionEnabled) {
     return Response.json({ error: "이 관광지 유형은 알을 획득할 수 없음" }, { status: 403 });
   }
+  // hasCoords가 false면 withinRadius는 항상 true라 이 분기를 안 탐 — 반경 판정을 클라가 이미 했음.
   if (!spot.withinRadius) {
     return Response.json({ error: "위치 확인 안 됨" }, { status: 422 });
   }

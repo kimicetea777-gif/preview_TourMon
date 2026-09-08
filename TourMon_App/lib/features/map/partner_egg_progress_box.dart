@@ -2,17 +2,16 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../../config/game_config.dart';
 import '../../config/sketch/sketch_card.dart';
 import '../../data/daily_distance_repository.dart';
 import '../../l10n/app_localizations.dart';
 import '../../l10n/enum_labels.dart';
-import '../auth/auth_session.dart';
+import '../consent/location_consent_dialog.dart';
 import '../distance/distance_refresh_info_sheet.dart';
 import '../distance/distance_tracker_service.dart';
-import '../distance/health_connect_notice_dialog.dart';
 import '../egg/distance_format.dart';
 import '../egg/egg_image.dart';
 import '../egg/egg_repository.dart';
@@ -23,7 +22,13 @@ import '../egg/user_egg.dart';
 /// (2026-08-18, 사용자 요청으로 행 탭 시 `EggInventoryScreen` 이동을 제거 — 알 보관함 진입점은
 /// 이제 `QuickActionsBox` 하나로 통일).
 class PartnerEggProgressBox extends StatefulWidget {
-  const PartnerEggProgressBox({super.key});
+  /// 배너에서 "위치 권한 켜기"를 눌렀을 때 실행할 콜백 — `map_screen`이 자기 기존 위치 플로우
+  /// (`_startLocationTracking` → `ensureLocationReady` → 동의 다이얼로그 → OS 요청 →
+  /// `deniedForever`면 설정 안내 → 위치 스트림 구독)를 그대로 넘겨준다. 배너는 위치 권한 요청
+  /// 로직을 자체적으로 갖지 않고 이 플로우로 위임한다(Document/temp.md 6-b).
+  final Future<void> Function()? onRequestLocationSetup;
+
+  const PartnerEggProgressBox({super.key, this.onRequestLocationSetup});
 
   @override
   State<PartnerEggProgressBox> createState() => _PartnerEggProgressBoxState();
@@ -39,11 +44,12 @@ class _PartnerEggProgressBoxState extends State<PartnerEggProgressBox> {
   double _todayDistanceMeters = 0;
   DateTime? _lastSyncedAt;
   Timer? _refreshTimer;
-  // 파트너 알이 있는데 Health Connect 권한이 없어 거리가 안 잡히는 상태 — 이때만 인라인 배너를
-  // 띄운다("걸었는데 수치가 안 올라간다"는 사용자 혼란 대응). 권한 요청 팝업은 파트너 알을
-  // 처음 지정할 때(egg_inventory_screen.dart)가 정식 시점이고, 이 배너는 그걸 놓쳤거나 설정에서
-  // 회수한 사용자의 복구 경로.
-  bool _needsHcConnect = false;
+  // 위치 동의/권한이 없어 **주 경로(GPS)** 자체가 안 도는 상태 — "걸었는데 수치가 안 올라간다"
+  // 복구 배너로 노출(Document/temp.md 6-b). 탭하면 map_screen의 위치 플로우로 위임
+  // (onRequestLocationSetup). 걸음 기록 권한(ACTIVITY_RECOGNITION)은 여기서 안 다룬다 —
+  // "앱이 꺼져 있어도 거리 측정" 토글(egg_inventory_screen의 _BackgroundDistanceCard)이 전담
+  // (2026-09-09). GPS 주 경로는 그 권한 없이도 정상 동작.
+  bool _locationBlocked = false;
 
   @override
   void initState() {
@@ -70,35 +76,44 @@ class _PartnerEggProgressBoxState extends State<PartnerEggProgressBox> {
         .getTodayDistanceMeters();
     final lastSyncedAt = await DistanceTrackerService.instance.lastSyncedAt();
     final partnerEggs = eggs.where((egg) => egg.isPartner).toList();
-    // 파트너 알이 있을 때만 HC 권한을 확인 — 없으면 거리가 안 늘어도 문제될 게 없어 배너가
-    // 불필요. hasPermission()은 UI 없는 조용한 조회라 폴링 주기마다 불러도 부담 없음(회수 시
-    // 배너 재등장도 이 재확인 덕분).
-    final needsHcConnect = Platform.isAndroid &&
-        partnerEggs.isNotEmpty &&
-        !(await DistanceTrackerService.instance.hasPermission());
+    // UI 없는 조용한 조회라 폴링 주기마다 불러도 부담 없음(설정에서 회수하면 배너가 다시 뜨는
+    // 것도 이 재확인 덕분). 위치 권한이 이미 있으면(=지도가 추적 중이면) checkPermission()이
+    // granted라 배너가 안 뜬다 — map_screen 내부 상태를 따로 볼 필요 없음.
+    final locationBlocked = Platform.isAndroid && await _isLocationBlocked();
     if (!mounted) return;
     setState(() {
       _partnerEggs = partnerEggs;
       _todayDistanceMeters = distanceMeters;
       _lastSyncedAt = lastSyncedAt;
-      _needsHcConnect = needsHcConnect;
+      _locationBlocked = locationBlocked;
     });
   }
 
-  // 인라인 "Health Connect 연결" 배너 탭 — egg_inventory_screen.dart의 파트너 지정 흐름과 동일하게
-  // 안내 다이얼로그를 먼저 띄운 뒤 권한/설치 플로우로 넘어간다(예고 없이 Play Store로 튀는 것 방지).
-  Future<void> _onConnectHcPressed() async {
-    final session = context.read<AuthSession>();
-    final proceed = await showHealthConnectNoticeDialog(context);
-    if (!proceed || !mounted) return;
-    await DistanceTrackerService.instance.start(session);
-    await _load();
+  Future<bool> _isLocationBlocked() async {
+    if (!await hasStoredLocationConsent()) return true;
+    final permission = await Geolocator.checkPermission();
+    return permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever ||
+        permission == LocationPermission.unableToDetermine;
   }
 
-  // 기본 4분 주기 Health Connect 동기화를 기다리지 않고 유저가 직접 당겨올 수 있는 탈출구
-  // (egg_inventory_screen.dart의 동일한 버튼과 같은 이유, Document/temp.md 참고) — syncNow()는
-  // 이미 있던 공개 메서드 그대로 재사용.
+  // 배너/새로고침 버튼 복구 경로(Document/temp.md 6-b) — 위치가 막혀 있으면 map_screen의 기존
+  // 위치 플로우로 위임한다(동의 다이얼로그/deniedForever 설정 안내/스트림 구독까지 그쪽이 처리).
+  Future<void> _onRecoveryPressed() async {
+    if (_locationBlocked && widget.onRequestLocationSetup != null) {
+      await widget.onRequestLocationSetup!.call();
+      if (mounted) await _load();
+    }
+  }
+
+  // 기본 서버 flush 주기를 기다리지 않고 유저가 직접 당겨올 수 있는 탈출구
+  // (egg_inventory_screen.dart의 동일한 버튼과 같은 이유). 위치가 막혀 있으면 이 버튼도 복구
+  // 경로로 동작(Document/temp.md 6-b).
   Future<void> _onSyncPressed() async {
+    if (_locationBlocked) {
+      await _onRecoveryPressed();
+      return;
+    }
     setState(() => _syncing = true);
     try {
       await DistanceTrackerService.instance.syncNow();
@@ -135,8 +150,8 @@ class _PartnerEggProgressBoxState extends State<PartnerEggProgressBox> {
             lastSyncedAt: _lastSyncedAt,
             syncing: _syncing,
             onSyncPressed: _onSyncPressed,
-            needsHcConnect: _needsHcConnect,
-            onConnectHcPressed: _onConnectHcPressed,
+            locationBlocked: _locationBlocked,
+            onRecoveryPressed: _onRecoveryPressed,
           ),
         ),
       ),
@@ -162,8 +177,8 @@ class _ExpandedContent extends StatelessWidget {
   final DateTime? lastSyncedAt;
   final bool syncing;
   final VoidCallback onSyncPressed;
-  final bool needsHcConnect;
-  final VoidCallback onConnectHcPressed;
+  final bool locationBlocked;
+  final VoidCallback onRecoveryPressed;
 
   const _ExpandedContent({
     required this.partnerEggs,
@@ -171,8 +186,8 @@ class _ExpandedContent extends StatelessWidget {
     required this.lastSyncedAt,
     required this.syncing,
     required this.onSyncPressed,
-    required this.needsHcConnect,
-    required this.onConnectHcPressed,
+    required this.locationBlocked,
+    required this.onRecoveryPressed,
   });
 
   @override
@@ -215,9 +230,9 @@ class _ExpandedContent extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             _RefreshHint(lastSyncedAt: lastSyncedAt),
-            if (needsHcConnect) ...[
+            if (locationBlocked) ...[
               const SizedBox(height: 6),
-              _HcConnectBanner(onPressed: onConnectHcPressed),
+              _DistanceSetupBanner(onPressed: onRecoveryPressed),
             ],
           ],
         ),
@@ -226,16 +241,18 @@ class _ExpandedContent extends StatelessWidget {
   }
 }
 
-/// 파트너 알은 있는데 Health Connect 권한이 없어 거리가 안 잡히는 상태에서만 뜨는 인라인 배너 —
-/// 탭하면 안내 다이얼로그 → 권한/설치 플로우. 박스 폭(180)이 좁아 짧은 문구 + 한 줄로 유지.
-class _HcConnectBanner extends StatelessWidget {
+/// "걸었는데 수치가 안 올라간다" 복구 배너 — 주 경로(GPS)를 막는 위치 동의/권한을 지도 위치
+/// 플로우로 위임한다(Document/temp.md 6-b). 박스 폭(180)이 좁아 짧은 문구 한 줄. 걸음 기록
+/// 권한은 이 배너에서 안 다룬다(2026-09-09, 별도 토글로 분리).
+class _DistanceSetupBanner extends StatelessWidget {
   final VoidCallback onPressed;
 
-  const _HcConnectBanner({required this.onPressed});
+  const _DistanceSetupBanner({required this.onPressed});
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final message = l10n.distanceBannerNeedsLocation;
     return InkWell(
       onTap: onPressed,
       child: Row(
@@ -249,7 +266,7 @@ class _HcConnectBanner extends StatelessWidget {
           const SizedBox(width: 4),
           Flexible(
             child: Text(
-              l10n.healthConnectConnectPrompt,
+              message,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Colors.deepOrange,
                 fontWeight: FontWeight.w600,
