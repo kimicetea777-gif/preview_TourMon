@@ -355,3 +355,33 @@ export const pollingCursors = pgTable("polling_cursors", {
   sinceId: bigint("since_id", { mode: "number" }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// 어드민 공지(src/app/admin/(protected)/notices) — R2의 config/app-notice.json 중 notices 배열의
+// 소스. 그 파일의 나머지 절반(android.minSupportedBuild/latestBuild/updateUrl, 강제 업데이트
+// 게이트)은 여기 안 두고 scripts/app-notice.json(git 버전관리, npm run notice:publish로만 편집)에
+// 그대로 남긴다 — 릴리스 주기로만 드물게 바뀌고 잘못되면 전체 유저가 앱을 못 쓰는 값이라, 어드민
+// 웹폼 한 번의 실수로 바뀌지 않게 git 리뷰+의도적 스크립트 실행이라는 문턱을 유지하려는 의도
+// (src/lib/notice-publish.ts 참고).
+export const noticeLevelEnum = pgEnum("notice_level", ["info", "warn", "critical"]);
+
+export const appNotices = pgTable("app_notices", {
+  id: serial("id").primaryKey(),
+  level: noticeLevelEnum("level").notNull(),
+  startsAt: timestamp("starts_at", { withTimezone: true }),
+  endsAt: timestamp("ends_at", { withTimezone: true }),
+  url: text("url"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const appNoticeTranslations = pgTable(
+  "app_notice_translations",
+  {
+    noticeId: integer("notice_id")
+      .notNull()
+      .references(() => appNotices.id, { onDelete: "cascade" }),
+    locale: text("locale").notNull(), // 'ko' | 'en'
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.noticeId, table.locale] })],
+);

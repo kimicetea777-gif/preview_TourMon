@@ -16,6 +16,7 @@ import {
   rarityWeightMultipliers,
   regions,
 } from "../src/db/schema";
+import { monsterArtUrls } from "../src/lib/monster-art";
 
 const REGIONS = [
   { code: "11", name: "서울특별시", isEnabled: true },
@@ -92,9 +93,6 @@ const EGG_TYPES = [
 const RARITIES = ["common", "rare", "epic", "legendary"] as const;
 const ATTRIBUTE_PLACEHOLDER = "grass" as const;
 
-// Resource/Ani·Resource/Img의 001~019 파일명 규칙과 동일 — scripts/monster-art/upload.ts가 R2에
-// 올리는 객체 키(monsters/img/{NNN}.webp, monsters/ani/{NNN}.webp)와 반드시 같은 규칙을 유지할 것.
-const ASSET_CDN_BASE_URL = "https://assets.kimicetea.app";
 const DEX_NUMBERS = Array.from({ length: 19 }, (_, i) => i + 1);
 
 function rarityForDexNumber(dexNumber: number): (typeof RARITIES)[number] {
@@ -148,13 +146,11 @@ const MONSTER_SPECIES = DEX_NUMBERS.map((dexNumber) => {
   if (!ko) throw new Error(`monster_enc_kor.md에 #${String(dexNumber).padStart(3, "0")}이 없음`);
   if (!en) throw new Error(`monster_enc_eng.md에 #${String(dexNumber).padStart(3, "0")}이 없음`);
 
-  const paddedNumber = String(dexNumber).padStart(3, "0");
   return {
     attribute: ATTRIBUTE_PLACEHOLDER,
     rarity: rarityForDexNumber(dexNumber),
     dexNumber,
-    imageUrl: `${ASSET_CDN_BASE_URL}/monsters/img/${paddedNumber}.webp`,
-    animationUrl: `${ASSET_CDN_BASE_URL}/monsters/ani/${paddedNumber}.webp`,
+    ...monsterArtUrls(dexNumber),
     name: ko.name,
     description: ko.description,
     nameEn: en.name,

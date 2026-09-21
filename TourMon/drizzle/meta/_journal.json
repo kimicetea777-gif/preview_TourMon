@@ -15,6 +15,13 @@
       "when": 1788050209960,
       "tag": "0001_drop_users_anonymized_at",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789458105573,
+      "tag": "0002_melodic_moondragon",
+      "breakpoints": true
     }
   ]
 }

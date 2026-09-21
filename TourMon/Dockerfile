@@ -18,6 +18,7 @@ ENV DATABASE_URL=postgresql://build:build@localhost:5432/build
 ENV AS_ISSUER_URL=http://build-placeholder.invalid
 ENV AS_DELETION_SYNC_CLIENT_ID=build-placeholder
 ENV AS_DELETION_SYNC_CLIENT_SECRET=build-placeholder
+ENV ADMIN_BASE_URL=http://build-placeholder.invalid
 RUN npm run build
 
 FROM node:22-alpine AS runner

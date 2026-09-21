@@ -77,4 +77,16 @@ class GameConfig {
   /// 하지 않음 — 게임 재화 적립용 근사치라 정밀도보다 단순함 우선(고정값 결정, 필요해지면 그때
   /// 프로필 기반으로 확장).
   static const double stepsToMetersFactor = 0.75;
+
+  /// pedometer 보조 경로 — `onAppPaused` 시점에 이번 구독에서 첫 스텝 이벤트를 아직 못 받았을 때
+  /// (백그라운드 측정 토글을 막 켰거나, 직전 diff 반영으로 baseline이 막 클리어된 직후) 재확인하는
+  /// 간격. `TYPE_STEP_COUNTER`는 동기식 getter가 없어 등록 직후 첫 이벤트가 비동기로 오는 걸
+  /// 기다려야 하는데, 기기별 센서 배치 주기에 따라 즉시~수 초까지 걸릴 수 있어 폴링으로 흡수한다.
+  static const Duration pedometerPauseStepWaitInterval = Duration(
+    milliseconds: 500,
+  );
+
+  /// 위 간격을 재시도할 횟수 — 총 대기 상한은 interval × attempts(현재 3초). 그래도 못 받으면
+  /// 기존처럼 조용히 스킵(이전 baseline 유지, self-healing으로 다음 사이클에 복구).
+  static const int pedometerPauseStepWaitAttempts = 6;
 }

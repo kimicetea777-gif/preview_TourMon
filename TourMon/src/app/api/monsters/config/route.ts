@@ -3,7 +3,9 @@
 // 위치 검증처럼 서버가 반드시 필요한 이유가 없음, 6단계 회원 대비 서버 authoritative 판정은 그때
 // 별도 라우트로 추가할 자리 — tourmon_planning_status 메모리의 "회원 알 위조 검증" 논의 참고),
 // 이 라우트는 클라이언트가 로컬 결정을 하는 데 필요한 원본 테이블을 그대로 내려주기만 함.
-// 관리자 수정 API가 아직 없어서 캐시 무효화 트리거가 없으므로 짧은 TTL로 자체 만료시킴.
+// 어드민 몬스터 추가(src/app/api/admin/monsters)가 성공 시 invalidateMonsterConfigCache()를
+// 불러서 즉시 무효화한다 — TTL은 그 사이 시차(단일 인스턴스 배포라 이걸로 충분, 인스턴스가
+// 여러 대로 늘어나면 재검토 필요)를 메우는 안전망으로만 남겨둠.
 // 7단계 — ?locale= 지원(로케일별로 캐시를 따로 둠, Document/temp.md Phase B 참고).
 import { inArray } from "drizzle-orm";
 import type { NextRequest } from "next/server";
@@ -15,10 +17,7 @@ import {
   rarityWeightMultipliers,
 } from "@/db/schema";
 import { localesToFetch, pickTranslation, resolveLocale, type Locale } from "@/lib/locale";
-
-const CACHE_TTL_MS = 60_000;
-
-const cache = new Map<Locale, { body: unknown; expiresAt: number }>();
+import { readCache, writeCache } from "@/lib/monster-config-cache";
 
 async function loadConfig(locale: Locale) {
   const [speciesRows, translationRows, attributeWeightRows, multiplierRows] = await Promise.all([
@@ -68,9 +67,10 @@ async function loadConfig(locale: Locale) {
 export async function GET(request: NextRequest) {
   const locale = resolveLocale(request);
   const now = Date.now();
-  const cached = cache.get(locale);
-  if (!cached || cached.expiresAt < now) {
-    cache.set(locale, { body: await loadConfig(locale), expiresAt: now + CACHE_TTL_MS });
-  }
-  return Response.json(cache.get(locale)!.body);
+  const cached = readCache(locale, now);
+  if (cached !== undefined) return Response.json(cached);
+
+  const body = await loadConfig(locale);
+  writeCache(locale, body, now);
+  return Response.json(body);
 }

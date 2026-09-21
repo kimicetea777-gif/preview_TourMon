@@ -94,6 +94,14 @@ class DistanceTrackerService {
   // 않도록, map_screen이 `Position.timestamp`를 이 시각과 비교해 이전 픽스는 버린다.
   DateTime? _lastResumedAt;
 
+  // `onAppPaused`가 첫 스텝 이벤트를 기다리는 폴링 도중(최대 3초) 사용자가 바로 앱으로 복귀하면
+  // `onAppResumed`가 먼저 실행돼 "저장된 baseline 없음"으로 지나가는데, 뒤늦게 폴링이 끝나 그
+  // 시점 기준 baseline을 저장해버리면 아무도 소비하지 않는 유령 baseline이 남는다 — 다음 진짜
+  // pause~resume 때 그 유령 baseline부터 diff를 계산해서, 그사이 포그라운드로 있었던(이미 GPS로
+  // 적립된) 구간까지 걸음으로 중복 적립될 수 있다. `onAppResumed`가 세대를 올리면 진행 중이던
+  // 폴링이 이를 감지하고 저장을 포기하도록 막는다.
+  int _pauseGeneration = 0;
+
   bool get _pedometerSupported => Platform.isAndroid;
 
   /// 서버 flush 타이머를 켜고(게스트도 로컬 적립엔 무관하지만 타이머 자체는 무해), pedometer
@@ -253,26 +261,42 @@ class DistanceTrackerService {
   /// persist하고, GPS 앵커 리셋 플래그를 세우고(5-c), 미전송 델타를 한 번 더 flush 시도.
   Future<void> onAppPaused() async {
     _gpsAnchorPendingReset = true;
-    // 보조 경로가 실제로 구독 중일 때만 baseline을 건드린다 — 권한이 없거나(구독 안 됨) 이번
-    // 세션에 스텝 이벤트를 한 번도 못 받았으면 조용히 스킵(temp.md 6번 graceful degradation).
+    final generation = ++_pauseGeneration;
+    // 보조 경로가 실제로 구독 중일 때만 baseline을 건드린다 — 권한이 없거나(구독 안 됨) 조용히
+    // 스킵(temp.md 6번 graceful degradation).
     if (_pedometerSupported && _pedometerSub != null) {
-      final steps = _lastKnownStepCount;
-      if (steps != null) {
+      var steps = _lastKnownStepCount;
+      // 이번 구독에서 스텝 이벤트를 한 번도 못 받은 경우(백그라운드 측정 토글을 막 켰거나, 직전
+      // diff 반영으로 baseline이 막 클리어된 직후) — 첫 이벤트가 등록 직후 곧 도착하는 걸 감안해
+      // 짧게 폴링 대기(GameConfig.pedometerPauseStepWaitInterval/Attempts). 그 사이 사용자가 바로
+      // 복귀하면(onAppResumed가 세대를 올림) 이 폴링은 스스로 멈춘다 — 계속 진행해서 뒤늦게 저장해
+      // 봤자 아무도 소비하지 않는 유령 baseline만 남고, 다음 진짜 pause~resume 때 그동안(대부분
+      // 포그라운드였던, 이미 GPS로 적립된) 구간까지 걸음으로 중복 적립되는 문제로 이어진다.
+      for (
+        var i = 0;
+        steps == null &&
+            i < GameConfig.pedometerPauseStepWaitAttempts &&
+            _pauseGeneration == generation;
+        i++
+      ) {
+        await Future.delayed(GameConfig.pedometerPauseStepWaitInterval);
+        steps = _lastKnownStepCount;
+      }
+      if (steps != null && _pauseGeneration == generation) {
         await _settings.setValue(_pedometerBaselineKey, '$steps');
         await _settings.setValue(
           _pedometerBaselineAtKey,
           DateTime.now().toIso8601String(),
         );
       }
-      // steps == null(앱이 방금 켜져 아직 한 번도 스텝 이벤트를 못 받음) — baseline 갱신을 스킵하고
-      // 이전 값을 그대로 둔다(다음 사이클에서 정상 캐싱되면 복구, temp.md 2번).
     }
     await _flushPendingToServer();
   }
 
   /// 앱이 포그라운드로 복귀하는 시점 — 첫 신선한 스텝 이벤트가 오면 보조 경로 diff를 반영하도록
-  /// 무장하고, 서버로 flush.
+  /// 무장하고, 서버로 flush. 세대를 올려 진행 중일 수 있는 `onAppPaused`의 폴링을 무효화한다.
   Future<void> onAppResumed() async {
+    _pauseGeneration++;
     _lastResumedAt = DateTime.now();
     if (_pedometerSupported && await _hasStoredPedometerBaseline()) {
       // 동기 getter가 없으므로 즉시 계산하지 않는다 — 캐시된 [_lastKnownStepCount]는 pause 이전

@@ -1,6 +1,7 @@
 // 2단계: TourAPI 관광지 데이터 배치 동기화 (areaBasedSyncList2, 국문만).
-// 수동 실행: npm run tour:sync — 아직 인증/크론 인프라가 없는 개발 단계라 map-pipeline과 동일하게
-// 스크립트 방식으로 둠. 상세 결정 배경: Document/init_plan.md 2단계, Document/tour_api_detail.md.
+// 수동 실행: npm run tour:sync. 어드민 콘솔(/admin/tour-sync, POST /api/admin/tour-sync)도 같은
+// runTourSync()를 그대로 import해서 씀 — 로직은 한 곳(여기)에만 둔다. 상세 결정 배경:
+// Document/init_plan.md 2단계, Document/tour_api_detail.md.
 //
 // ⚠️ 영문(EngService2) 배치 수집은 하지 않음 — KorService2/EngService2가 content_id를 공유한다는
 // 문서 전제(init_plan.md 4-7 섹션)가 실제로는 틀렸음을 확인함(예: 경복궁 content_id=126508은
@@ -8,6 +9,7 @@
 // 퍼지 매칭 등 재설계가 필요해서 7단계(다국어)로 연기 — title_en/addr1_en/addr2_en은 현재 null.
 import "dotenv/config";
 import { eq, sql } from "drizzle-orm";
+import { fileURLToPath } from "node:url";
 import { db } from "../../src/db";
 import { regions, tourismSpots } from "../../src/db/schema";
 import {
@@ -17,17 +19,27 @@ import {
 } from "../../src/lib/tour-api";
 import { CALL_BUDGET_WARNING_THRESHOLD, NUM_OF_ROWS } from "./config";
 
-let callCount = 0;
-let budgetWarned = false;
+// runTourSync()가 여러 번 호출될 수 있어서(어드민 콘솔은 tsx처럼 매번 새 프로세스로 뜨는 게 아니라
+// 같은 Next.js 프로세스 안에서 계속 재사용됨) 호출 카운트를 모듈 전역 변수로 두면 두 번째 실행부터
+// 이전 카운트가 누적돼버린다 — 매 실행마다 새로 만드는 로컬 트래커로 바꿈.
+interface CallTracker {
+  trackCall(): void;
+  count: number;
+}
 
-function trackCall() {
-  callCount += 1;
-  if (!budgetWarned && callCount >= CALL_BUDGET_WARNING_THRESHOLD) {
-    budgetWarned = true;
-    console.warn(
-      `⚠️ TourAPI 호출 수가 ${callCount}회 — 일일 1,000회 한도에 근접함`,
-    );
-  }
+function createCallTracker(): CallTracker {
+  const tracker: CallTracker = {
+    count: 0,
+    trackCall() {
+      tracker.count += 1;
+      if (tracker.count === CALL_BUDGET_WARNING_THRESHOLD) {
+        console.warn(
+          `⚠️ TourAPI 호출 수가 ${tracker.count}회 — 일일 1,000회 한도에 근접함`,
+        );
+      }
+    },
+  };
+  return tracker;
 }
 
 function toYyyymmdd(date: Date): string {
@@ -45,18 +57,21 @@ async function getModifiedSinceCutoff(): Promise<string | undefined> {
   return toYyyymmdd(new Date(row.maxSyncedAt));
 }
 
-async function fetchAllPages(params: {
-  service: "kor" | "eng";
-  lDongRegnCd: string;
-  lDongSignguCd: string;
-  modifiedtime?: string;
-}): Promise<AreaBasedSyncItem[]> {
+async function fetchAllPages(
+  tracker: CallTracker,
+  params: {
+    service: "kor" | "eng";
+    lDongRegnCd: string;
+    lDongSignguCd: string;
+    modifiedtime?: string;
+  },
+): Promise<AreaBasedSyncItem[]> {
   const first = await fetchAreaBasedSyncList({
     ...params,
     pageNo: 1,
     numOfRows: NUM_OF_ROWS,
   });
-  trackCall();
+  tracker.trackCall();
 
   const items = [...first.items];
   const totalPages = Math.ceil(first.totalCount / NUM_OF_ROWS);
@@ -66,7 +81,7 @@ async function fetchAllPages(params: {
       pageNo,
       numOfRows: NUM_OF_ROWS,
     });
-    trackCall();
+    tracker.trackCall();
     items.push(...page.items);
   }
   return items;
@@ -106,7 +121,14 @@ async function upsertKorItems(items: AreaBasedSyncItem[], regionCode: string) {
   }
 }
 
-async function main() {
+export interface TourSyncResult {
+  callCount: number;
+  regionCount: number;
+}
+
+export async function runTourSync(): Promise<TourSyncResult> {
+  const tracker = createCallTracker();
+
   const enabledRegions = await db
     .select()
     .from(regions)
@@ -125,12 +147,12 @@ async function main() {
       service: "kor",
       lDongRegnCd: region.code,
     });
-    trackCall();
+    tracker.trackCall();
     console.log(`[${region.name}] 시군구 ${signguList.length}개`);
 
     for (const signgu of signguList) {
       console.log(`  - ${region.name} ${signgu.name}(${signgu.code}) 국문 수집 중...`);
-      const korItems = await fetchAllPages({
+      const korItems = await fetchAllPages(tracker, {
         service: "kor",
         lDongRegnCd: region.code,
         lDongSignguCd: signgu.code,
@@ -141,12 +163,18 @@ async function main() {
     }
   }
 
-  console.log(`\n동기화 완료 — 총 TourAPI 호출 ${callCount}회`);
+  console.log(`\n동기화 완료 — 총 TourAPI 호출 ${tracker.count}회`);
+  return { callCount: tracker.count, regionCount: enabledRegions.length };
 }
 
-main()
-  .catch((err) => {
-    console.error(err);
-    process.exit(1);
-  })
-  .finally(() => process.exit(0));
+// tsx로 이 파일을 직접 실행했을 때만 돈다 — 어드민 콘솔처럼 다른 모듈이 runTourSync()를 import할
+// 때는 이 블록이 실행되면 안 된다(특히 process.exit()는 그 경우 Next.js 서버 프로세스 전체를 죽임).
+const isMainModule = process.argv[1] === fileURLToPath(import.meta.url);
+if (isMainModule) {
+  runTourSync()
+    .catch((err) => {
+      console.error(err);
+      process.exit(1);
+    })
+    .finally(() => process.exit(0));
+}

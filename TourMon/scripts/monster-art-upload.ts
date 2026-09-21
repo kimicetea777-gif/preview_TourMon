@@ -2,7 +2,8 @@
 // Resource/Img(정적 PNG, 2048x2048)·Resource/Ani(APNG, 480x480)의 001~019 파일을 WebP로 변환해서
 // tourmon-asset-cdn 워커(cloudflare-worker/assets)가 서빙하는 monsters/img/{NNN}.webp,
 // monsters/ani/{NNN}.webp 키로 tourmon-assets 버킷(map-pipeline과 동일 버킷)에 올린다.
-// scripts/seed.ts의 MONSTER_SPECIES가 만드는 URL(ASSET_CDN_BASE_URL + 이 키 규칙)과 반드시 맞아야 함.
+// scripts/seed.ts·어드민 몬스터 추가(src/app/api/admin/monsters)가 만드는 URL(src/lib/monster-art.ts의
+// monsterArtUrls())과 반드시 같은 키 규칙을 유지해야 함.
 // map-pipeline처럼 여러 단계로 쪼갤 만큼 크지 않은 일회성 작업이라 스크립트 하나로 끝냄
 // (Document/temp.md "몬스터 아트 파이프라인" 참고).
 import "dotenv/config";

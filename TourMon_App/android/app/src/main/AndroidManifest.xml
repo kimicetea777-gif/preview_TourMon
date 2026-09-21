@@ -15,7 +15,16 @@
     <application
         android:label="TourMon"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false">
+        <!-- allowBackup="false"(2026-09-14) — 기본값(true)이면 Android 자동 백업이 게임 데이터
+             전체(sqflite DB 하나에 알/몬스터/거리/웰컴알 지급 플래그까지 다 들어있음, app_settings_repository.dart
+             참고)를 구글 드라이브에 백업했다가, 같은 구글 계정 기기에서 삭제 후 재설치 시 조용히
+             복원해버림 — "삭제하면 완전 초기화"라는 사용자 기대와 어긋나고, 웰컴 알 재설치 파밍
+             허용 설계(Document/temp.md "앱 설치 웰컴 알")도 의도치 않게 막힘. 트레이드오프: 기기
+             변경/재설치 시 정상 유저도 로컬 데이터를 복구할 방법이 없어짐(서버 백업이 없는 게스트
+             전용 출시라 지금은 이 트레이드오프가 더 유리하다고 판단) -->
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
