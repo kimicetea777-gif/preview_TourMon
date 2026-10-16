@@ -6,3 +6,6 @@
 # (Sound_format_tool/convert.py 로 chosed/ → ogg_files/ 재생성)
 Resource/audio/Ori/
 Resource/audio/chosed/
+
+# Claude Code local state (machine-specific paths)
+.claude/
